@@ -1,0 +1,38 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.app = void 0;
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const helmet_1 = __importDefault(require("helmet"));
+const morgan_1 = __importDefault(require("morgan"));
+const env_1 = require("./config/env");
+const auth_1 = __importDefault(require("./routes/auth"));
+const brands_1 = __importDefault(require("./routes/brands"));
+const products_1 = __importDefault(require("./routes/products"));
+const categories_1 = __importDefault(require("./routes/categories"));
+const cart_1 = __importDefault(require("./routes/cart"));
+const orders_1 = __importDefault(require("./routes/orders"));
+const admin_1 = __importDefault(require("./routes/admin"));
+const error_1 = require("./middleware/error");
+const db_1 = require("./lib/db");
+exports.app = (0, express_1.default)();
+(0, db_1.initDb)();
+exports.app.use((0, cors_1.default)({
+    origin: env_1.env.FRONTEND_URL,
+}));
+exports.app.use((0, helmet_1.default)());
+exports.app.use(express_1.default.json({ limit: "1mb" }));
+exports.app.use((0, morgan_1.default)("dev"));
+exports.app.get("/api/health", (_req, res) => res.json({ ok: true }));
+exports.app.use("/api/auth", auth_1.default);
+exports.app.use("/api/brands", brands_1.default);
+exports.app.use("/api/products", products_1.default);
+exports.app.use("/api/categories", categories_1.default);
+exports.app.use("/api/cart", cart_1.default);
+exports.app.use("/api/orders", orders_1.default);
+exports.app.use("/api/admin", admin_1.default);
+exports.app.use(error_1.notFoundHandler);
+exports.app.use(error_1.errorHandler);
