@@ -69,6 +69,7 @@ const run = async () => {
   db.exec(`
     DELETE FROM order_items;
     DELETE FROM orders;
+    DELETE FROM favorites;
     DELETE FROM cart_items;
     DELETE FROM carts;
     DELETE FROM product_images;

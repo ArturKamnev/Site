@@ -1,7 +1,9 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useCartStore } from "../stores/cartStore";
+import { useFavoritesStore } from "../stores/favoritesStore";
+import { useRecentlyViewedStore } from "../stores/recentlyViewedStore";
 import type { Product } from "../types";
 
 type ProductFull = Product & { images: Array<{ id: number; url: string; alt?: string }> };
@@ -16,10 +18,16 @@ const ProductPage = () => {
   const { slug } = useParams();
   const [product, setProduct] = useState<ProductFull | null>(null);
   const addItem = useCartStore((state) => state.addItem);
+  const toggleFavorite = useFavoritesStore((state) => state.toggleFavorite);
+  const isFavorite = useFavoritesStore((state) => (product ? state.isFavorite(product.id) : false));
+  const addRecentlyViewed = useRecentlyViewedStore((state) => state.addItem);
 
   useEffect(() => {
-    api.get<ProductFull>(`/products/${slug}`).then((response) => setProduct(response.data));
-  }, [slug]);
+    api.get<ProductFull>(`/products/${slug}`).then((response) => {
+      setProduct(response.data);
+      addRecentlyViewed(response.data);
+    });
+  }, [slug, addRecentlyViewed]);
 
   if (!product) return <p className="empty-state">Загрузка товара...</p>;
 
@@ -48,9 +56,18 @@ const ProductPage = () => {
           {product.stock > 0 ? `В наличии: ${product.stock} шт.` : "Нет в наличии"}
         </div>
 
-        <button type="button" onClick={() => addItem(product, 1)} disabled={product.stock <= 0}>
-          Добавить в корзину
-        </button>
+        <div className="product-main-actions">
+          <button type="button" onClick={() => addItem(product, 1)} disabled={product.stock <= 0}>
+            Добавить в корзину
+          </button>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => toggleFavorite(product)}
+          >
+            {isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+          </button>
+        </div>
 
         <div className="description-card">
           <h3>Описание и характеристики</h3>

@@ -11,10 +11,10 @@ const ORDER_STATUS = ["PENDING", "PROCESSING", "SHIPPED", "COMPLETED", "CANCELED
 router.use(authRequired, rolesRequired("admin", "employee"));
 
 const brandSchema = z.object({
-  name: z.string().min(2).max(120),
-  slug: z.string().min(2).max(120).optional(),
-  logoUrl: z.string().url().optional().or(z.literal("")),
-  description: z.string().max(400).optional(),
+  name: z.string().trim().min(2).max(120),
+  slug: z.string().trim().min(2).max(120).optional(),
+  logoUrl: z.string().trim().url().optional().or(z.literal("")),
+  description: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
 const categorySchema = z.object({
@@ -39,6 +39,16 @@ const productSchema = z.object({
   categoryId: z.number().int().positive(),
   specsJson: z.string().optional(),
 });
+
+const normalizeBrandPayload = (body: z.infer<typeof brandSchema>) => {
+  const slug = body.slug ? slugify(body.slug) : slugify(body.name);
+  return {
+    name: body.name.trim(),
+    slug,
+    logoUrl: body.logoUrl?.trim() ? body.logoUrl.trim() : null,
+    description: body.description?.trim() ? body.description.trim() : null,
+  };
+};
 
 router.get("/dashboard", (_req, res, next) => {
   try {
@@ -154,16 +164,25 @@ router.get("/brands", (_req, res, next) => {
 
 router.post("/brands", (req, res, next) => {
   try {
-    const body = brandSchema.parse(req.body);
+    const payload = normalizeBrandPayload(brandSchema.parse(req.body));
+    const existing = db.prepare("SELECT id FROM brands WHERE slug = ?").get(payload.slug) as
+      | { id: number }
+      | undefined;
+    if (existing) {
+      return res.status(409).json({ message: "Brand slug already exists" });
+    }
+
     const result = db
       .prepare("INSERT INTO brands (name, slug, logo_url, description) VALUES (?, ?, ?, ?)")
       .run(
-        body.name,
-        body.slug ? slugify(body.slug) : slugify(body.name),
-        body.logoUrl || null,
-        body.description ?? null,
+        payload.name,
+        payload.slug,
+        payload.logoUrl,
+        payload.description,
       );
-    res.status(201).json({ id: Number(result.lastInsertRowid) });
+
+    const brand = db.prepare("SELECT * FROM brands WHERE id = ?").get(Number(result.lastInsertRowid));
+    res.status(201).json(brand);
   } catch (error) {
     next(error);
   }
@@ -172,19 +191,39 @@ router.post("/brands", (req, res, next) => {
 router.put("/brands/:id", (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const body = brandSchema.parse(req.body);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: "Invalid brand id" });
+    }
+
+    const existingBrand = db.prepare("SELECT id FROM brands WHERE id = ?").get(id) as
+      | { id: number }
+      | undefined;
+    if (!existingBrand) {
+      return res.status(404).json({ message: "Brand not found" });
+    }
+
+    const payload = normalizeBrandPayload(brandSchema.parse(req.body));
+    const slugConflict = db
+      .prepare("SELECT id FROM brands WHERE slug = ? AND id <> ?")
+      .get(payload.slug, id) as { id: number } | undefined;
+    if (slugConflict) {
+      return res.status(409).json({ message: "Brand slug already exists" });
+    }
+
     db.prepare(
       `UPDATE brands
        SET name = ?, slug = ?, logo_url = ?, description = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     ).run(
-      body.name,
-      body.slug ? slugify(body.slug) : slugify(body.name),
-      body.logoUrl || null,
-      body.description ?? null,
+      payload.name,
+      payload.slug,
+      payload.logoUrl,
+      payload.description,
       id,
     );
-    res.json({ message: "Brand updated" });
+
+    const brand = db.prepare("SELECT * FROM brands WHERE id = ?").get(id);
+    res.json(brand);
   } catch (error) {
     next(error);
   }

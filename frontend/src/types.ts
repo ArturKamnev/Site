@@ -45,6 +45,12 @@ export type Product = {
   categorySlug?: string;
 };
 
+export type FavoriteItem = Product & {
+  favoriteId?: number;
+  productId?: number;
+  createdAt?: string;
+};
+
 export type CartItem = {
   id?: number;
   cart_id?: number;

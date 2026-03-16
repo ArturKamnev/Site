@@ -9,10 +9,10 @@ const router = (0, express_1.Router)();
 const ORDER_STATUS = ["PENDING", "PROCESSING", "SHIPPED", "COMPLETED", "CANCELED"];
 router.use(auth_1.authRequired, (0, auth_1.rolesRequired)("admin", "employee"));
 const brandSchema = zod_1.z.object({
-    name: zod_1.z.string().min(2).max(120),
-    slug: zod_1.z.string().min(2).max(120).optional(),
-    logoUrl: zod_1.z.string().url().optional().or(zod_1.z.literal("")),
-    description: zod_1.z.string().max(400).optional(),
+    name: zod_1.z.string().trim().min(2).max(120),
+    slug: zod_1.z.string().trim().min(2).max(120).optional(),
+    logoUrl: zod_1.z.string().trim().url().optional().or(zod_1.z.literal("")),
+    description: zod_1.z.string().trim().max(500).optional().or(zod_1.z.literal("")),
 });
 const categorySchema = zod_1.z.object({
     name: zod_1.z.string().min(2).max(120),
@@ -35,6 +35,15 @@ const productSchema = zod_1.z.object({
     categoryId: zod_1.z.number().int().positive(),
     specsJson: zod_1.z.string().optional(),
 });
+const normalizeBrandPayload = (body) => {
+    const slug = body.slug ? (0, slugify_1.slugify)(body.slug) : (0, slugify_1.slugify)(body.name);
+    return {
+        name: body.name.trim(),
+        slug,
+        logoUrl: body.logoUrl?.trim() ? body.logoUrl.trim() : null,
+        description: body.description?.trim() ? body.description.trim() : null,
+    };
+};
 router.get("/dashboard", (_req, res, next) => {
     try {
         const users = db_1.db.prepare("SELECT COUNT(*) as c FROM users").get().c;
@@ -112,11 +121,16 @@ router.get("/brands", (_req, res, next) => {
 });
 router.post("/brands", (req, res, next) => {
     try {
-        const body = brandSchema.parse(req.body);
+        const payload = normalizeBrandPayload(brandSchema.parse(req.body));
+        const existing = db_1.db.prepare("SELECT id FROM brands WHERE slug = ?").get(payload.slug);
+        if (existing) {
+            return res.status(409).json({ message: "Brand slug already exists" });
+        }
         const result = db_1.db
             .prepare("INSERT INTO brands (name, slug, logo_url, description) VALUES (?, ?, ?, ?)")
-            .run(body.name, body.slug ? (0, slugify_1.slugify)(body.slug) : (0, slugify_1.slugify)(body.name), body.logoUrl || null, body.description ?? null);
-        res.status(201).json({ id: Number(result.lastInsertRowid) });
+            .run(payload.name, payload.slug, payload.logoUrl, payload.description);
+        const brand = db_1.db.prepare("SELECT * FROM brands WHERE id = ?").get(Number(result.lastInsertRowid));
+        res.status(201).json(brand);
     }
     catch (error) {
         next(error);
@@ -125,11 +139,25 @@ router.post("/brands", (req, res, next) => {
 router.put("/brands/:id", (req, res, next) => {
     try {
         const id = Number(req.params.id);
-        const body = brandSchema.parse(req.body);
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({ message: "Invalid brand id" });
+        }
+        const existingBrand = db_1.db.prepare("SELECT id FROM brands WHERE id = ?").get(id);
+        if (!existingBrand) {
+            return res.status(404).json({ message: "Brand not found" });
+        }
+        const payload = normalizeBrandPayload(brandSchema.parse(req.body));
+        const slugConflict = db_1.db
+            .prepare("SELECT id FROM brands WHERE slug = ? AND id <> ?")
+            .get(payload.slug, id);
+        if (slugConflict) {
+            return res.status(409).json({ message: "Brand slug already exists" });
+        }
         db_1.db.prepare(`UPDATE brands
        SET name = ?, slug = ?, logo_url = ?, description = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ?`).run(body.name, body.slug ? (0, slugify_1.slugify)(body.slug) : (0, slugify_1.slugify)(body.name), body.logoUrl || null, body.description ?? null, id);
-        res.json({ message: "Brand updated" });
+       WHERE id = ?`).run(payload.name, payload.slug, payload.logoUrl, payload.description, id);
+        const brand = db_1.db.prepare("SELECT * FROM brands WHERE id = ?").get(id);
+        res.json(brand);
     }
     catch (error) {
         next(error);

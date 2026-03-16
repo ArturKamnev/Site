@@ -4,13 +4,14 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useCartStore } from "../stores/cartStore";
+import { useFavoritesStore } from "../stores/favoritesStore";
 import type { User } from "../types";
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const setAuth = useAuthStore((state) => state.setAuth);
-  const [email, setEmail] = useState("admin@parts.local");
-  const [password, setPassword] = useState("admin1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   const onSubmit = async (event: FormEvent) => {
@@ -19,7 +20,10 @@ const LoginPage = () => {
     try {
       const { data } = await api.post<{ token: string; user: User }>("/auth/login", { email, password });
       setAuth(data.token, data.user);
-      await useCartStore.getState().syncGuestToServer();
+      await Promise.all([
+        useCartStore.getState().syncGuestToServer(),
+        useFavoritesStore.getState().syncGuestToServer(),
+      ]);
       navigate("/");
     } catch {
       setError("Неверный логин или пароль");
@@ -31,6 +35,7 @@ const LoginPage = () => {
       <div className="surface auth-card">
         <h1>Вход</h1>
         <p className="muted">Войдите в аккаунт, чтобы управлять заказами и профилем.</p>
+        <p className="muted auth-demo-hint">Демо: admin@parts.local / admin1234</p>
         <form className="form" onSubmit={onSubmit}>
           <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" />
           <input

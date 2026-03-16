@@ -34,7 +34,7 @@ const BrandsPage = () => {
 
       <div className="grid grid-brand">
         {brands.map((brand) => (
-          <Link key={brand.id} to={`/brands/${brand.slug}`} className="card brand-card">
+          <Link key={brand.id} to={`/brand/${brand.slug}`} className="card brand-card">
             <img src={brand.logo_url || "https://dummyimage.com/280x120/e2e8f0/0f172a&text=Brand"} alt={brand.name} />
             <div className="card-body">
               <h3>{brand.name}</h3>

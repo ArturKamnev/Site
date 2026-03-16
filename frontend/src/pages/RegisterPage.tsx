@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useCartStore } from "../stores/cartStore";
+import { useFavoritesStore } from "../stores/favoritesStore";
 import type { User } from "../types";
 
 const RegisterPage = () => {
@@ -23,7 +24,10 @@ const RegisterPage = () => {
     try {
       const { data } = await api.post<{ token: string; user: User }>("/auth/register", form);
       setAuth(data.token, data.user);
-      await useCartStore.getState().syncGuestToServer();
+      await Promise.all([
+        useCartStore.getState().syncGuestToServer(),
+        useFavoritesStore.getState().syncGuestToServer(),
+      ]);
       navigate("/");
     } catch {
       setError("Ошибка регистрации");

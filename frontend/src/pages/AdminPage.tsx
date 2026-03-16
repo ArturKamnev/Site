@@ -21,6 +21,14 @@ const defaultProduct = {
   specsJson: "",
 };
 
+const defaultBrandForm = {
+  id: null as number | null,
+  name: "",
+  slug: "",
+  logoUrl: "",
+  description: "",
+};
+
 const money = new Intl.NumberFormat("ru-RU", {
   style: "currency",
   currency: "USD",
@@ -34,7 +42,7 @@ const AdminPage = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [productForm, setProductForm] = useState(defaultProduct);
-  const [brandName, setBrandName] = useState("");
+  const [brandForm, setBrandForm] = useState(defaultBrandForm);
   const [categoryName, setCategoryName] = useState("");
 
   const load = async () => {
@@ -64,6 +72,35 @@ const AdminPage = () => {
     await api.post("/admin/products", productForm);
     setProductForm(defaultProduct);
     await load();
+  };
+
+  const submitBrand = async (event: FormEvent) => {
+    event.preventDefault();
+    const payload = {
+      name: brandForm.name,
+      slug: brandForm.slug || undefined,
+      logoUrl: brandForm.logoUrl || "",
+      description: brandForm.description || "",
+    };
+
+    if (brandForm.id) {
+      await api.put(`/admin/brands/${brandForm.id}`, payload);
+    } else {
+      await api.post("/admin/brands", payload);
+    }
+
+    setBrandForm(defaultBrandForm);
+    await load();
+  };
+
+  const startBrandEdit = (brand: Brand) => {
+    setBrandForm({
+      id: brand.id,
+      name: brand.name,
+      slug: brand.slug,
+      logoUrl: brand.logo_url || "",
+      description: brand.description || "",
+    });
   };
 
   return (
@@ -158,24 +195,60 @@ const AdminPage = () => {
 
       <h2>Бренды и категории</h2>
       <div className="two-col">
-        <form
-          className="form surface"
-          onSubmit={(event) => {
-            event.preventDefault();
-            api.post("/admin/brands", { name: brandName }).then(() => {
-              setBrandName("");
-              load();
-            });
-          }}
-        >
-          <input value={brandName} onChange={(event) => setBrandName(event.target.value)} placeholder="Новый бренд" />
-          <button type="submit">Добавить бренд</button>
-          {brands.map((brand) => (
-            <div key={brand.id} className="inline-row">
-              <span>{brand.name}</span>
-              <button type="button" className="danger" onClick={() => api.delete(`/admin/brands/${brand.id}`).then(load)}>
-                Удалить
+        <form className="form surface" onSubmit={submitBrand}>
+          <h3>{brandForm.id ? "Редактировать бренд" : "Добавить бренд"}</h3>
+          <input
+            value={brandForm.name}
+            onChange={(event) => setBrandForm((prev) => ({ ...prev, name: event.target.value }))}
+            placeholder="Название бренда"
+            required
+          />
+          <input
+            value={brandForm.slug}
+            onChange={(event) => setBrandForm((prev) => ({ ...prev, slug: event.target.value }))}
+            placeholder="Slug (необязательно)"
+          />
+          <input
+            value={brandForm.logoUrl}
+            onChange={(event) => setBrandForm((prev) => ({ ...prev, logoUrl: event.target.value }))}
+            placeholder="URL логотипа"
+          />
+          <textarea
+            value={brandForm.description}
+            onChange={(event) => setBrandForm((prev) => ({ ...prev, description: event.target.value }))}
+            placeholder="Описание бренда"
+          />
+          <div className="inline-row">
+            <button type="submit">{brandForm.id ? "Сохранить бренд" : "Добавить бренд"}</button>
+            {brandForm.id ? (
+              <button type="button" className="ghost-btn" onClick={() => setBrandForm(defaultBrandForm)}>
+                Отмена
               </button>
+            ) : null}
+          </div>
+
+          {brands.map((brand) => (
+            <div key={brand.id} className="brand-admin-item">
+              <img
+                src={brand.logo_url || "https://dummyimage.com/120x50/e2e8f0/0f172a&text=Brand"}
+                alt={brand.name}
+              />
+              <div>
+                <strong>{brand.name}</strong>
+                <p className="muted">{brand.description || "Описание не заполнено"}</p>
+              </div>
+              <div className="inline-row">
+                <button type="button" className="ghost-btn" onClick={() => startBrandEdit(brand)}>
+                  Изменить
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => api.delete(`/admin/brands/${brand.id}`).then(load)}
+                >
+                  Удалить
+                </button>
+              </div>
             </div>
           ))}
         </form>

@@ -10,6 +10,7 @@ import categoryRoutes from "./routes/categories";
 import cartRoutes from "./routes/cart";
 import orderRoutes from "./routes/orders";
 import adminRoutes from "./routes/admin";
+import favoriteRoutes from "./routes/favorites";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { initDb } from "./lib/db";
 
@@ -33,6 +34,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/favorites", favoriteRoutes);
 app.use("/api/admin", adminRoutes);
 
 app.use(notFoundHandler);

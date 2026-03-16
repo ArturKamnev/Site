@@ -46,9 +46,15 @@ const BrandPage = () => {
 
   return (
     <section className="brand-page">
-      <div className="title-block">
-        <h1>{data?.brand.name ?? "Бренд"}</h1>
-        <p>{data?.brand.description || "Выберите подходящие запчасти по параметрам ниже."}</p>
+      <div className="brand-hero surface">
+        <img
+          src={data?.brand.logo_url || "https://dummyimage.com/500x180/e2e8f0/0f172a&text=Brand"}
+          alt={data?.brand.name ?? "Бренд"}
+        />
+        <div>
+          <h1>{data?.brand.name ?? "Бренд"}</h1>
+          <p>{data?.brand.description || "Выберите подходящие запчасти по параметрам ниже."}</p>
+        </div>
       </div>
 
       <div className="catalog-layout">

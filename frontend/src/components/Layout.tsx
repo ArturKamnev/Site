@@ -1,13 +1,17 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/authStore";
 import { useCartStore } from "../stores/cartStore";
+import { useFavoritesStore } from "../stores/favoritesStore";
 
 const routeLabels: Record<string, string> = {
   brands: "Бренды",
+  brand: "Бренд",
   products: "Товары",
+  product: "Товар",
   cart: "Корзина",
+  favorites: "Избранное",
   checkout: "Оформление заказа",
   login: "Вход",
   register: "Регистрация",
@@ -22,7 +26,10 @@ const formatBreadcrumbLabel = (segment: string) => {
 
 const Layout = () => {
   const { user, logout } = useAuthStore();
+  const loadCart = useCartStore((state) => state.loadCart);
   const cartItems = useCartStore((state) => state.items);
+  const loadFavorites = useFavoritesStore((state) => state.loadFavorites);
+  const favorites = useFavoritesStore((state) => state.items);
   const location = useLocation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
@@ -49,31 +56,22 @@ const Layout = () => {
     navigate(trimmed ? `/brands?search=${encodeURIComponent(trimmed)}` : "/brands");
   };
 
+  const onLogout = () => {
+    logout();
+    Promise.all([loadCart(), loadFavorites()]);
+    navigate("/");
+  };
+
   return (
     <div className="app-shell">
       <header className="site-header">
-        <div className="top-strip">
-          <div className="container top-strip-inner">
-            <div className="top-strip-meta">
-              <span>Бишкек</span>
-              <span>Центральный склад</span>
-              <span>Пн-Сб 08:00-18:00</span>
-            </div>
-            <div className="top-strip-links">
-              <Link to="/brands">Каталог</Link>
-              <Link to="/checkout">Быстрый заказ</Link>
-              <span>RUB</span>
-            </div>
-          </div>
-        </div>
-
         <div className="main-header">
           <div className="container main-header-inner">
             <Link to="/" className="brand-title">
               <span className="brand-title-mark">TP</span>
               <span>
                 Truck Parts
-                <small>Профессиональные запчасти</small>
+                <small>Marketplace автозапчастей</small>
               </span>
             </Link>
 
@@ -102,6 +100,11 @@ const Layout = () => {
                 </NavLink>
               )}
 
+              <NavLink to="/favorites" className="header-action-link">
+                Избранное
+                <span className="counter">{favorites.length}</span>
+              </NavLink>
+
               <NavLink to="/cart" className="header-action-link">
                 Корзина
                 <span className="counter">{cartItems.length}</span>
@@ -114,7 +117,7 @@ const Layout = () => {
               ) : null}
 
               {user ? (
-                <button type="button" className="link-btn" onClick={logout}>
+                <button type="button" className="link-btn" onClick={onLogout}>
                   Выйти
                 </button>
               ) : null}
@@ -126,6 +129,7 @@ const Layout = () => {
           <div className="container section-nav-inner">
             <NavLink to="/">Главная</NavLink>
             <NavLink to="/brands">Бренды</NavLink>
+            <NavLink to="/favorites">Избранное</NavLink>
             <NavLink to="/cart">Корзина</NavLink>
             <NavLink to="/profile">Личный кабинет</NavLink>
           </div>
@@ -161,6 +165,7 @@ const Layout = () => {
             <h5>Навигация</h5>
             <div className="footer-links">
               <Link to="/brands">Каталог брендов</Link>
+              <Link to="/favorites">Избранное</Link>
               <Link to="/cart">Корзина</Link>
               <Link to="/profile">Профиль</Link>
             </div>
