@@ -69,6 +69,8 @@ export const initDb = () => {
       article TEXT,
       part_id TEXT,
       price REAL NOT NULL,
+      old_price REAL,
+      discount_percent REAL,
       image TEXT,
       description TEXT,
       manufacturer TEXT,
@@ -152,6 +154,20 @@ export const initDb = () => {
       FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS hero_slides (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      position INTEGER NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      image_url TEXT NOT NULL,
+      title TEXT,
+      subtitle TEXT,
+      button_text TEXT,
+      button_link TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand_id);
     CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
     CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
@@ -159,8 +175,16 @@ export const initDb = () => {
     CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
     CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);
     CREATE INDEX IF NOT EXISTS idx_favorites_product ON favorites(product_id);
+    CREATE INDEX IF NOT EXISTS idx_hero_slides_active_position ON hero_slides(is_active, position);
   `);
 
   ensureColumn("brands", "logo_url", "logo_url TEXT");
   ensureColumn("brands", "description", "description TEXT");
+  ensureColumn("products", "old_price", "old_price REAL");
+  ensureColumn("products", "discount_percent", "discount_percent REAL");
+  ensureColumn("hero_slides", "title", "title TEXT");
+  ensureColumn("hero_slides", "subtitle", "subtitle TEXT");
+  ensureColumn("hero_slides", "button_text", "button_text TEXT");
+  ensureColumn("hero_slides", "button_link", "button_link TEXT");
+  ensureColumn("hero_slides", "is_active", "is_active INTEGER NOT NULL DEFAULT 1");
 };

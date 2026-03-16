@@ -30,6 +30,7 @@ const productSchema = z.object({
   article: z.string().max(120).optional(),
   partId: z.string().max(120).optional(),
   price: z.number().nonnegative(),
+  discountPercent: z.number().min(0).max(95).optional().default(0),
   image: z.string().url().optional().or(z.literal("")),
   description: z.string().optional(),
   manufacturer: z.string().max(120).optional(),
@@ -39,6 +40,22 @@ const productSchema = z.object({
   categoryId: z.number().int().positive(),
   specsJson: z.string().optional(),
 });
+
+const discountSchema = z.object({
+  discountPercent: z.number().min(0).max(95),
+});
+
+const heroSlideSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  imageUrl: z.string().trim().url(),
+  title: z.string().trim().max(160).optional().or(z.literal("")),
+  subtitle: z.string().trim().max(260).optional().or(z.literal("")),
+  buttonText: z.string().trim().max(60).optional().or(z.literal("")),
+  buttonLink: z.string().trim().max(300).optional().or(z.literal("")),
+  isActive: z.boolean().optional().default(true),
+});
+
+const heroSlideUpdateSchema = heroSlideSchema.partial();
 
 const normalizeBrandPayload = (body: z.infer<typeof brandSchema>) => {
   const slug = body.slug ? slugify(body.slug) : slugify(body.name);
@@ -50,6 +67,47 @@ const normalizeBrandPayload = (body: z.infer<typeof brandSchema>) => {
   };
 };
 
+const normalizePricing = (price: number, discountPercent?: number) => {
+  if (!discountPercent || discountPercent <= 0) {
+    return {
+      price,
+      oldPrice: null as number | null,
+      discountPercent: null as number | null,
+    };
+  }
+
+  const normalizedDiscount = Number(discountPercent.toFixed(2));
+  const oldPrice = Number((price / (1 - normalizedDiscount / 100)).toFixed(2));
+
+  return {
+    price,
+    oldPrice,
+    discountPercent: normalizedDiscount,
+  };
+};
+
+const normalizeHeroSlidePayload = (payload: z.infer<typeof heroSlideSchema>) => ({
+  label: payload.label.trim(),
+  imageUrl: payload.imageUrl.trim(),
+  title: payload.title?.trim() ? payload.title.trim() : null,
+  subtitle: payload.subtitle?.trim() ? payload.subtitle.trim() : null,
+  buttonText: payload.buttonText?.trim() ? payload.buttonText.trim() : null,
+  buttonLink: payload.buttonLink?.trim() ? payload.buttonLink.trim() : null,
+  isActive: payload.isActive ? 1 : 0,
+});
+
+const compactHeroSlidePositions = () => {
+  const slides = db.prepare("SELECT id FROM hero_slides ORDER BY position ASC").all() as Array<{ id: number }>;
+  const shiftPosition = db.prepare("UPDATE hero_slides SET position = ? WHERE id = ?");
+
+  for (const [index, slide] of slides.entries()) {
+    shiftPosition.run(1000 + index, slide.id);
+  }
+  for (const [index, slide] of slides.entries()) {
+    shiftPosition.run(index + 1, slide.id);
+  }
+};
+
 router.get("/dashboard", (_req, res, next) => {
   try {
     const users = (db.prepare("SELECT COUNT(*) as c FROM users").get() as { c: number }).c;
@@ -57,7 +115,8 @@ router.get("/dashboard", (_req, res, next) => {
     const brands = (db.prepare("SELECT COUNT(*) as c FROM brands").get() as { c: number }).c;
     const categories = (db.prepare("SELECT COUNT(*) as c FROM categories").get() as { c: number }).c;
     const orders = (db.prepare("SELECT COUNT(*) as c FROM orders").get() as { c: number }).c;
-    res.json({ users, products, brands, categories, orders });
+    const heroSlides = (db.prepare("SELECT COUNT(*) as c FROM hero_slides").get() as { c: number }).c;
+    res.json({ users, products, brands, categories, orders, heroSlides });
   } catch (error) {
     next(error);
   }
@@ -85,11 +144,12 @@ router.get("/products", (_req, res, next) => {
 router.post("/products", (req, res, next) => {
   try {
     const body = productSchema.parse(req.body);
+    const pricing = normalizePricing(body.price, body.discountPercent);
     const result = db
       .prepare(
         `INSERT INTO products
-         (name, slug, sku, article, part_id, price, image, description, manufacturer, stock, is_available, brand_id, category_id, specs_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (name, slug, sku, article, part_id, price, old_price, discount_percent, image, description, manufacturer, stock, is_available, brand_id, category_id, specs_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         body.name,
@@ -97,7 +157,9 @@ router.post("/products", (req, res, next) => {
         body.sku,
         body.article ?? null,
         body.partId ?? null,
-        body.price,
+        pricing.price,
+        pricing.oldPrice,
+        pricing.discountPercent,
         body.image || null,
         body.description ?? null,
         body.manufacturer ?? null,
@@ -117,9 +179,10 @@ router.put("/products/:id", (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const body = productSchema.parse(req.body);
+    const pricing = normalizePricing(body.price, body.discountPercent);
     db.prepare(
       `UPDATE products
-       SET name = ?, slug = ?, sku = ?, article = ?, part_id = ?, price = ?, image = ?, description = ?, manufacturer = ?,
+       SET name = ?, slug = ?, sku = ?, article = ?, part_id = ?, price = ?, old_price = ?, discount_percent = ?, image = ?, description = ?, manufacturer = ?,
            stock = ?, is_available = ?, brand_id = ?, category_id = ?, specs_json = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
     ).run(
@@ -128,7 +191,9 @@ router.put("/products/:id", (req, res, next) => {
       body.sku,
       body.article ?? null,
       body.partId ?? null,
-      body.price,
+      pricing.price,
+      pricing.oldPrice,
+      pricing.discountPercent,
       body.image || null,
       body.description ?? null,
       body.manufacturer ?? null,
@@ -140,6 +205,33 @@ router.put("/products/:id", (req, res, next) => {
       id,
     );
     res.json({ message: "Product updated" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch("/products/:id/discount", (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: "Invalid product id" });
+    }
+
+    const body = discountSchema.parse(req.body);
+    const product = db.prepare("SELECT id, price FROM products WHERE id = ?").get(id) as
+      | { id: number; price: number }
+      | undefined;
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    const pricing = normalizePricing(product.price, body.discountPercent);
+    db.prepare(
+      "UPDATE products SET old_price = ?, discount_percent = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    ).run(pricing.oldPrice, pricing.discountPercent, id);
+
+    const updated = db.prepare("SELECT * FROM products WHERE id = ?").get(id);
+    res.json(updated);
   } catch (error) {
     next(error);
   }
@@ -277,6 +369,141 @@ router.delete("/categories/:id", (req, res, next) => {
   try {
     db.prepare("DELETE FROM categories WHERE id = ?").run(Number(req.params.id));
     res.json({ message: "Category deleted" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/hero-slides", (_req, res, next) => {
+  try {
+    const slides = db.prepare("SELECT * FROM hero_slides ORDER BY position ASC").all();
+    res.json(slides);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/hero-slides", (req, res, next) => {
+  try {
+    const payload = normalizeHeroSlidePayload(heroSlideSchema.parse(req.body));
+    const maxPosition = db.prepare("SELECT COALESCE(MAX(position), 0) as maxPosition FROM hero_slides").get() as {
+      maxPosition: number;
+    };
+    const nextPosition = maxPosition.maxPosition + 1;
+
+    const result = db
+      .prepare(
+        `INSERT INTO hero_slides
+         (position, label, image_url, title, subtitle, button_text, button_link, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        nextPosition,
+        payload.label,
+        payload.imageUrl,
+        payload.title,
+        payload.subtitle,
+        payload.buttonText,
+        payload.buttonLink,
+        payload.isActive,
+      );
+
+    const slide = db.prepare("SELECT * FROM hero_slides WHERE id = ?").get(Number(result.lastInsertRowid));
+    res.status(201).json(slide);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/hero-slides/:id", (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: "Invalid hero slide id" });
+    }
+
+    const slide = db.prepare("SELECT * FROM hero_slides WHERE id = ?").get(id) as
+      | {
+          id: number;
+          label: string;
+          image_url: string;
+          title: string | null;
+          subtitle: string | null;
+          button_text: string | null;
+          button_link: string | null;
+          is_active: number;
+        }
+      | undefined;
+    if (!slide) {
+      return res.status(404).json({ message: "Hero slide not found" });
+    }
+
+    const patch = heroSlideUpdateSchema.parse(req.body);
+    const updatedLabel = patch.label?.trim() || slide.label;
+    const updatedImage = patch.imageUrl?.trim() || slide.image_url;
+    const updatedTitle =
+      patch.title === undefined ? slide.title : patch.title.trim() ? patch.title.trim() : null;
+    const updatedSubtitle =
+      patch.subtitle === undefined ? slide.subtitle : patch.subtitle.trim() ? patch.subtitle.trim() : null;
+    const updatedButtonText =
+      patch.buttonText === undefined
+        ? slide.button_text
+        : patch.buttonText.trim()
+          ? patch.buttonText.trim()
+          : null;
+    const updatedButtonLink =
+      patch.buttonLink === undefined
+        ? slide.button_link
+        : patch.buttonLink.trim()
+          ? patch.buttonLink.trim()
+          : null;
+    const updatedActive = patch.isActive === undefined ? slide.is_active : patch.isActive ? 1 : 0;
+
+    db.prepare(
+      `UPDATE hero_slides
+       SET label = ?, image_url = ?, title = ?, subtitle = ?, button_text = ?, button_link = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+    ).run(
+      updatedLabel,
+      updatedImage,
+      updatedTitle,
+      updatedSubtitle,
+      updatedButtonText,
+      updatedButtonLink,
+      updatedActive,
+      id,
+    );
+
+    const updated = db.prepare("SELECT * FROM hero_slides WHERE id = ?").get(id);
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete("/hero-slides/:id", (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ message: "Invalid hero slide id" });
+    }
+
+    const tx = db.transaction((slideId: number) => {
+      const existing = db.prepare("SELECT id FROM hero_slides WHERE id = ?").get(slideId) as
+        | { id: number }
+        | undefined;
+      if (!existing) return false;
+      db.prepare("DELETE FROM hero_slides WHERE id = ?").run(slideId);
+      compactHeroSlidePositions();
+      return true;
+    });
+
+    const deleted = tx(id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Hero slide not found" });
+    }
+
+    res.json({ message: "Hero slide deleted" });
   } catch (error) {
     next(error);
   }

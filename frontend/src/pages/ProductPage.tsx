@@ -29,7 +29,12 @@ const ProductPage = () => {
     });
   }, [slug, addRecentlyViewed]);
 
-  if (!product) return <p className="empty-state">Загрузка товара...</p>;
+  if (!product) return <p className="empty-state">Loading product...</p>;
+
+  const hasDiscount =
+    (product.discount_percent ?? 0) > 0 &&
+    Boolean(product.old_price) &&
+    Number(product.old_price) > product.price;
 
   return (
     <section className="product-view">
@@ -42,36 +47,35 @@ const ProductPage = () => {
         <h1>{product.name}</h1>
 
         <div className="product-meta-row">
-          <span className="meta-chip">Артикул: {product.article || "-"}</span>
+          <span className="meta-chip">Article: {product.article || "-"}</span>
           <span className="meta-chip">SKU: {product.sku}</span>
           <span className="meta-chip">Part ID: {product.part_id || "-"}</span>
         </div>
 
-        <p className="price">{money.format(product.price)}</p>
+        <div className="price-stack">
+          <p className="price">{money.format(product.price)}</p>
+          {hasDiscount ? <p className="old-price">{money.format(Number(product.old_price))}</p> : null}
+          {hasDiscount ? <span className="discount-badge">-{product.discount_percent}%</span> : null}
+        </div>
+
         <p className="muted">
-          Категория: {product.categoryName || "-"} | Производитель: {product.manufacturer || "-"}
+          Category: {product.categoryName || "-"} | Manufacturer: {product.manufacturer || "-"}
         </p>
 
-        <div className="stock-badge">
-          {product.stock > 0 ? `В наличии: ${product.stock} шт.` : "Нет в наличии"}
-        </div>
+        <div className="stock-badge">{product.stock > 0 ? `In stock: ${product.stock}` : "Out of stock"}</div>
 
         <div className="product-main-actions">
           <button type="button" onClick={() => addItem(product, 1)} disabled={product.stock <= 0}>
-            Добавить в корзину
+            Add to cart
           </button>
-          <button
-            type="button"
-            className="ghost-btn"
-            onClick={() => toggleFavorite(product)}
-          >
-            {isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+          <button type="button" className="ghost-btn" onClick={() => toggleFavorite(product)}>
+            {isFavorite ? "Remove favorite" : "Add favorite"}
           </button>
         </div>
 
         <div className="description-card">
-          <h3>Описание и характеристики</h3>
-          <p>{product.description || "Описание пока не добавлено."}</p>
+          <h3>Description</h3>
+          <p>{product.description || "No description yet."}</p>
         </div>
       </div>
     </section>

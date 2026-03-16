@@ -11,6 +11,7 @@ import cartRoutes from "./routes/cart";
 import orderRoutes from "./routes/orders";
 import adminRoutes from "./routes/admin";
 import favoriteRoutes from "./routes/favorites";
+import heroSlideRoutes from "./routes/heroSlides";
 import { errorHandler, notFoundHandler } from "./middleware/error";
 import { initDb } from "./lib/db";
 
@@ -35,6 +36,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/favorites", favoriteRoutes);
+app.use("/api/hero-slides", heroSlideRoutes);
 app.use("/api/admin", adminRoutes);
 
 app.use(notFoundHandler);

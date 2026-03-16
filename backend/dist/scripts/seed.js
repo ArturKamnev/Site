@@ -71,6 +71,7 @@ const run = async () => {
     DELETE FROM order_items;
     DELETE FROM orders;
     DELETE FROM favorites;
+    DELETE FROM hero_slides;
     DELETE FROM cart_items;
     DELETE FROM carts;
     DELETE FROM product_images;
@@ -98,6 +99,12 @@ const run = async () => {
     for (const category of categoryNames) {
         insertCategory.run(category, (0, slugify_1.slugify)(category), `Категория: ${category}`);
     }
+    const insertHeroSlide = db_1.db.prepare(`INSERT INTO hero_slides
+     (position, label, image_url, title, subtitle, button_text, button_link, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    insertHeroSlide.run(1, "Top offer", "https://dummyimage.com/1280x420/dbeafe/0b2f62&text=Top+Offer", "Suspension and brake discounts", "OEM-compatible parts for commercial transport.", "Open catalog", "/brands", 1);
+    insertHeroSlide.run(2, "Fleet B2B", "https://dummyimage.com/1280x420/e0f2fe/0b2f62&text=Fleet+B2B", "Dedicated pricing for service fleets", "Bulk ordering and transparent stock visibility.", "Go to profile", "/profile", 1);
+    insertHeroSlide.run(3, "New arrivals", "https://dummyimage.com/1280x420/eff6ff/0b2f62&text=New+Arrivals", null, null, null, null, 1);
     const brands = db_1.db.prepare("SELECT id, name FROM brands ORDER BY id ASC").all();
     const categories = db_1.db.prepare("SELECT id, name FROM categories ORDER BY id ASC").all();
     const insertProduct = db_1.db.prepare(`INSERT INTO products

@@ -6,17 +6,17 @@ import { useCartStore } from "../stores/cartStore";
 import { useFavoritesStore } from "../stores/favoritesStore";
 
 const routeLabels: Record<string, string> = {
-  brands: "Бренды",
-  brand: "Бренд",
-  products: "Товары",
-  product: "Товар",
-  cart: "Корзина",
-  favorites: "Избранное",
-  checkout: "Оформление заказа",
-  login: "Вход",
-  register: "Регистрация",
-  profile: "Профиль",
-  admin: "Админка",
+  brands: "Brands",
+  brand: "Brand",
+  products: "Products",
+  product: "Product",
+  cart: "Cart",
+  favorites: "Favorites",
+  checkout: "Checkout",
+  login: "Login",
+  register: "Register",
+  profile: "Profile",
+  admin: "Admin",
 };
 
 const formatBreadcrumbLabel = (segment: string) => {
@@ -33,6 +33,7 @@ const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const segments = location.pathname.split("/").filter(Boolean);
   const breadcrumbs = useMemo(
@@ -49,6 +50,10 @@ const Layout = () => {
     const params = new URLSearchParams(location.search);
     setSearchQuery(params.get("search") ?? "");
   }, [location.search]);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname, location.search]);
 
   const onSearchSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -67,79 +72,139 @@ const Layout = () => {
       <header className="site-header">
         <div className="main-header">
           <div className="container main-header-inner">
-            <Link to="/" className="brand-title">
-              <span className="brand-title-mark">TP</span>
-              <span>
-                Truck Parts
-                <small>Marketplace автозапчастей</small>
-              </span>
-            </Link>
+            <div className="mobile-header-row">
+              <Link to="/" className="brand-title">
+                <span className="brand-title-mark">TP</span>
+                <span>
+                  Truck Parts
+                  <small>Auto parts marketplace</small>
+                </span>
+              </Link>
 
-            <NavLink to="/brands" className="catalog-btn">
-              Каталог
+              <div className="mobile-actions">
+                <NavLink to="/favorites" className="mobile-icon-btn" aria-label="Favorites">
+                  F
+                  <span className="counter">{favorites.length}</span>
+                </NavLink>
+                <NavLink to="/cart" className="mobile-icon-btn" aria-label="Cart">
+                  C
+                  <span className="counter">{cartItems.length}</span>
+                </NavLink>
+                <button
+                  type="button"
+                  className="mobile-icon-btn burger-btn"
+                  aria-label="Open menu"
+                  onClick={() => setMobileMenuOpen(true)}
+                >
+                  ≡
+                </button>
+              </div>
+            </div>
+
+            <NavLink to="/brands" className="catalog-btn desktop-only">
+              Catalog
             </NavLink>
 
-            <form className="header-search" onSubmit={onSearchSubmit}>
+            <form className="header-search desktop-only" onSubmit={onSearchSubmit}>
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Поиск по бренду, SKU или артикулу"
-                aria-label="Поиск запчастей"
+                placeholder="Search by brand, SKU, article"
+                aria-label="Search parts"
               />
-              <button type="submit">Найти</button>
+              <button type="submit">Search</button>
             </form>
 
-            <nav className="header-actions">
+            <nav className="header-actions desktop-only">
               {user ? (
                 <NavLink to="/profile" className="header-action-link">
-                  Профиль
+                  Profile
                 </NavLink>
               ) : (
                 <NavLink to="/login" className="header-action-link">
-                  Вход
+                  Login
                 </NavLink>
               )}
 
               <NavLink to="/favorites" className="header-action-link">
-                Избранное
+                Favorites
                 <span className="counter">{favorites.length}</span>
               </NavLink>
 
               <NavLink to="/cart" className="header-action-link">
-                Корзина
+                Cart
                 <span className="counter">{cartItems.length}</span>
               </NavLink>
 
               {user && (user.role === "admin" || user.role === "employee") ? (
                 <NavLink to="/admin" className="header-action-link">
-                  Админка
+                  Admin
                 </NavLink>
               ) : null}
 
               {user ? (
                 <button type="button" className="link-btn" onClick={onLogout}>
-                  Выйти
+                  Logout
                 </button>
               ) : null}
             </nav>
           </div>
         </div>
 
-        <nav className="section-nav">
+        <nav className="section-nav desktop-only">
           <div className="container section-nav-inner">
-            <NavLink to="/">Главная</NavLink>
-            <NavLink to="/brands">Бренды</NavLink>
-            <NavLink to="/favorites">Избранное</NavLink>
-            <NavLink to="/cart">Корзина</NavLink>
-            <NavLink to="/profile">Личный кабинет</NavLink>
+            <NavLink to="/">Home</NavLink>
+            <NavLink to="/brands">Brands</NavLink>
+            <NavLink to="/favorites">Favorites</NavLink>
+            <NavLink to="/cart">Cart</NavLink>
+            <NavLink to="/profile">Profile</NavLink>
           </div>
         </nav>
+
+        <div
+          className={`mobile-drawer-overlay ${mobileMenuOpen ? "open" : ""}`}
+          onClick={() => setMobileMenuOpen(false)}
+        />
+        <aside className={`mobile-drawer ${mobileMenuOpen ? "open" : ""}`}>
+          <div className="mobile-drawer-head">
+            <strong>Menu</strong>
+            <button type="button" className="mobile-icon-btn" onClick={() => setMobileMenuOpen(false)}>
+              x
+            </button>
+          </div>
+
+          <form className="mobile-search" onSubmit={onSearchSubmit}>
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by brand, SKU, article"
+            />
+            <button type="submit">Search</button>
+          </form>
+
+          <nav className="mobile-nav-links">
+            <NavLink to="/">Home</NavLink>
+            <NavLink to="/brands">Brands</NavLink>
+            <NavLink to="/favorites">Favorites</NavLink>
+            <NavLink to="/cart">Cart</NavLink>
+            <NavLink to="/profile">Profile</NavLink>
+            {user && (user.role === "admin" || user.role === "employee") ? <NavLink to="/admin">Admin</NavLink> : null}
+            {!user ? <NavLink to="/login">Login</NavLink> : null}
+            {!user ? <NavLink to="/register">Register</NavLink> : null}
+          </nav>
+
+          {user ? (
+            <button type="button" className="danger" onClick={onLogout}>
+              Logout
+            </button>
+          ) : null}
+        </aside>
       </header>
 
       <main className="content">
         <div className="container">
           <div className="breadcrumbs">
-            <Link to="/">Главная</Link>
+            <Link to="/">Home</Link>
             {breadcrumbs.map((crumb) => (
               <span key={crumb.href}>
                 <span className="breadcrumbs-separator">/</span>
@@ -159,19 +224,19 @@ const Layout = () => {
         <div className="container site-footer-inner">
           <div>
             <h4>Truck Parts Store</h4>
-            <p>Интернет-магазин запчастей для грузовой техники, сервисных парков и дилеров.</p>
+            <p>Parts for commercial vehicles, workshops, and fleet operators.</p>
           </div>
           <div>
-            <h5>Навигация</h5>
+            <h5>Navigation</h5>
             <div className="footer-links">
-              <Link to="/brands">Каталог брендов</Link>
-              <Link to="/favorites">Избранное</Link>
-              <Link to="/cart">Корзина</Link>
-              <Link to="/profile">Профиль</Link>
+              <Link to="/brands">Brands</Link>
+              <Link to="/favorites">Favorites</Link>
+              <Link to="/cart">Cart</Link>
+              <Link to="/profile">Profile</Link>
             </div>
           </div>
           <div>
-            <h5>Контакты</h5>
+            <h5>Contacts</h5>
             <p>+996 (700) 123-456</p>
             <p>support@truckparts.local</p>
           </div>

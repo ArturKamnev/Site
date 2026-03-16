@@ -35,7 +35,6 @@ const LoginPage = () => {
       <div className="surface auth-card">
         <h1>Вход</h1>
         <p className="muted">Войдите в аккаунт, чтобы управлять заказами и профилем.</p>
-        <p className="muted auth-demo-hint">Демо: admin@parts.local / admin1234</p>
         <form className="form" onSubmit={onSubmit}>
           <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" />
           <input

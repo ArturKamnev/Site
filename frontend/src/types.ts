@@ -32,6 +32,8 @@ export type Product = {
   article?: string | null;
   part_id?: string | null;
   price: number;
+  old_price?: number | null;
+  discount_percent?: number | null;
   image?: string | null;
   description?: string | null;
   manufacturer?: string | null;
@@ -49,6 +51,18 @@ export type FavoriteItem = Product & {
   favoriteId?: number;
   productId?: number;
   createdAt?: string;
+};
+
+export type HeroSlide = {
+  id: number;
+  position: number;
+  label: string;
+  image_url: string;
+  title?: string | null;
+  subtitle?: string | null;
+  button_text?: string | null;
+  button_link?: string | null;
+  is_active: number;
 };
 
 export type CartItem = {

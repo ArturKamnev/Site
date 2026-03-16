@@ -17,7 +17,10 @@ const ProductCard = ({ product }: Props) => {
   const addItem = useCartStore((state) => state.addItem);
   const toggleFavorite = useFavoritesStore((state) => state.toggleFavorite);
   const isFavorite = useFavoritesStore((state) => state.isFavorite(product.id));
-  const oldPrice = product.price * 1.12;
+  const hasDiscount =
+    (product.discount_percent ?? 0) > 0 &&
+    Boolean(product.old_price) &&
+    Number(product.old_price) > product.price;
 
   return (
     <article className="card product-card">
@@ -25,30 +28,32 @@ const ProductCard = ({ product }: Props) => {
         type="button"
         className={`favorite-btn ${isFavorite ? "active" : ""}`}
         onClick={() => toggleFavorite(product)}
-        aria-label={isFavorite ? "Убрать из избранного" : "Добавить в избранное"}
+        aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
       >
-        {isFavorite ? "В избранном" : "В избранное"}
+        {isFavorite ? "In favorites" : "Favorite"}
       </button>
+
+      {hasDiscount ? <span className="discount-badge">-{product.discount_percent}%</span> : null}
 
       <Link to={`/product/${product.slug}`} className="product-card-media">
         <img src={product.image || "https://dummyimage.com/800x600/e2e8f0/0f172a&text=No+Image"} alt={product.name} />
       </Link>
       <div className="card-body product-card-body">
-        <p className="muted product-brand">{product.brandName || product.manufacturer || "Без бренда"}</p>
+        <p className="muted product-brand">{product.brandName || product.manufacturer || "No brand"}</p>
         <Link to={`/product/${product.slug}`} className="product-title">
           {product.name}
         </Link>
-        <p className="muted">Артикул: {product.article || product.sku || "-"}</p>
+        <p className="muted">Article: {product.article || product.sku || "-"}</p>
         <div className="price-stack">
           <p className="price">{money.format(product.price)}</p>
-          <p className="old-price">{money.format(oldPrice)}</p>
+          {hasDiscount ? <p className="old-price">{money.format(Number(product.old_price))}</p> : null}
         </div>
         <div className="card-actions">
           <Link to={`/product/${product.slug}`} className="ghost-btn">
-            Подробнее
+            Details
           </Link>
           <button type="button" onClick={() => addItem(product, 1)} disabled={product.stock <= 0}>
-            В корзину
+            Add to cart
           </button>
         </div>
       </div>
