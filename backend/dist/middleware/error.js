@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.errorHandler = exports.notFoundHandler = void 0;
+const pg_1 = require("pg");
 const zod_1 = require("zod");
 const notFoundHandler = (_req, res) => {
     res.status(404).json({ message: "Route not found" });
@@ -15,6 +16,17 @@ const errorHandler = (err, _req, res, _next) => {
                 message: issue.message,
             })),
         });
+    }
+    if (err instanceof pg_1.DatabaseError) {
+        if (err.code === "23505") {
+            return res.status(409).json({ message: "Resource already exists" });
+        }
+        if (err.code === "23503") {
+            return res.status(409).json({ message: "Referenced resource does not exist" });
+        }
+        if (err.code === "22P02") {
+            return res.status(400).json({ message: "Invalid identifier or payload format" });
+        }
     }
     if (err instanceof Error) {
         const appError = err;

@@ -2,6 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const app_1 = require("./app");
 const env_1 = require("./config/env");
-app_1.app.listen(env_1.env.PORT, () => {
-    console.log(`API server started on http://localhost:${env_1.env.PORT}`);
+const db_1 = require("./lib/db");
+const start = async () => {
+    await (0, db_1.initDb)();
+    app_1.app.listen(env_1.env.PORT, () => {
+        console.log(`API server started on http://localhost:${env_1.env.PORT}`);
+    });
+};
+start().catch((error) => {
+    console.error("Failed to start API server", error);
+    process.exit(1);
 });

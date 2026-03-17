@@ -19,16 +19,14 @@ const checkoutSchema = zod_1.z.object({
     }))
         .optional(),
 });
-router.post("/", auth_1.optionalAuth, (req, res, next) => {
+router.post("/", auth_1.optionalAuth, async (req, res, next) => {
     try {
         const body = checkoutSchema.parse(req.body);
         let sourceItems = [];
         if (req.user) {
-            const cart = db_1.db.prepare("SELECT id FROM carts WHERE user_id = ?").get(req.user.id);
+            const cart = await (0, db_1.queryOne)("SELECT id FROM carts WHERE user_id = $1", [req.user.id]);
             if (cart) {
-                sourceItems = db_1.db
-                    .prepare("SELECT product_id as productId, quantity FROM cart_items WHERE cart_id = ?")
-                    .all(cart.id);
+                sourceItems = await (0, db_1.query)('SELECT product_id as "productId", quantity FROM cart_items WHERE cart_id = $1', [cart.id]);
             }
         }
         else {
@@ -45,12 +43,10 @@ router.post("/", auth_1.optionalAuth, (req, res, next) => {
             productId,
             quantity,
         }));
-        const tx = db_1.db.transaction(() => {
+        const order = await (0, db_1.withTransaction)(async (client) => {
             const orderItemRows = [];
             for (const item of normalizedItems) {
-                const product = db_1.db
-                    .prepare("SELECT id, name, sku, price, stock, is_available as isAvailable FROM products WHERE id = ?")
-                    .get(item.productId);
+                const product = await (0, db_1.queryOne)('SELECT id, name, sku, price, stock, is_available as "isAvailable" FROM products WHERE id = $1 FOR UPDATE', [item.productId], client);
                 if (!product)
                     continue;
                 const availableStock = product.isAvailable ? Math.max(product.stock, 0) : 0;
@@ -76,47 +72,60 @@ router.post("/", auth_1.optionalAuth, (req, res, next) => {
                 throw new Error("No valid products for checkout");
             }
             const total = orderItemRows.reduce((sum, entry) => sum + entry.lineTotal, 0);
-            const orderResult = db_1.db
-                .prepare(`INSERT INTO orders (user_id, status, full_name, phone, email, comment, address, pickup_method, total)
-           VALUES (?, 'PENDING', ?, ?, ?, ?, ?, ?, ?)`)
-                .run(req.user?.id ?? null, body.fullName, body.phone, body.email, body.comment ?? null, body.address ?? null, body.pickupMethod ?? null, total);
-            const orderId = Number(orderResult.lastInsertRowid);
-            const insertOrderItem = db_1.db.prepare(`INSERT INTO order_items (order_id, product_id, snapshot_name, snapshot_sku, price, quantity, line_total)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`);
-            for (const row of orderItemRows) {
-                insertOrderItem.run(orderId, row.productId, row.snapshotName, row.snapshotSku, row.price, row.quantity, row.lineTotal);
+            const createdOrder = await (0, db_1.queryOne)(`INSERT INTO orders (user_id, status, full_name, phone, email, comment, address, pickup_method, total)
+         VALUES ($1, 'PENDING', $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id`, [
+                req.user?.id ?? null,
+                body.fullName,
+                body.phone,
+                body.email,
+                body.comment ?? null,
+                body.address ?? null,
+                body.pickupMethod ?? null,
+                total,
+            ], client);
+            if (!createdOrder) {
+                throw new Error("Could not create order");
             }
-            const decreaseStock = db_1.db.prepare("UPDATE products SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+            const orderId = createdOrder.id;
             for (const row of orderItemRows) {
-                decreaseStock.run(row.quantity, row.productId);
+                await (0, db_1.query)(`INSERT INTO order_items (order_id, product_id, snapshot_name, snapshot_sku, price, quantity, line_total)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`, [
+                    orderId,
+                    row.productId,
+                    row.snapshotName,
+                    row.snapshotSku,
+                    row.price,
+                    row.quantity,
+                    row.lineTotal,
+                ], client);
+            }
+            for (const row of orderItemRows) {
+                await (0, db_1.query)("UPDATE products SET stock = stock - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [row.quantity, row.productId], client);
             }
             if (req.user) {
-                const cart = db_1.db.prepare("SELECT id FROM carts WHERE user_id = ?").get(req.user.id);
+                const cart = await (0, db_1.queryOne)("SELECT id FROM carts WHERE user_id = $1", [req.user.id], client);
                 if (cart) {
-                    db_1.db.prepare("DELETE FROM cart_items WHERE cart_id = ?").run(cart.id);
+                    await (0, db_1.query)("DELETE FROM cart_items WHERE cart_id = $1", [cart.id], client);
                 }
             }
-            const order = db_1.db.prepare("SELECT * FROM orders WHERE id = ?").get(orderId);
-            const items = db_1.db.prepare("SELECT * FROM order_items WHERE order_id = ?").all(orderId);
-            return { ...order, items };
+            const order = await (0, db_1.queryOne)("SELECT * FROM orders WHERE id = $1", [orderId], client);
+            const items = await (0, db_1.query)("SELECT * FROM order_items WHERE order_id = $1", [orderId], client);
+            return { ...(order ?? {}), items };
         });
-        const order = tx();
         res.status(201).json(order);
     }
     catch (error) {
         next(error);
     }
 });
-router.get("/my", auth_1.authRequired, (req, res, next) => {
+router.get("/my", auth_1.authRequired, async (req, res, next) => {
     try {
-        const orders = db_1.db
-            .prepare("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC")
-            .all(req.user.id);
-        const itemsStmt = db_1.db.prepare("SELECT * FROM order_items WHERE order_id = ?");
-        const data = orders.map((order) => ({
+        const orders = await (0, db_1.query)("SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC", [req.user.id]);
+        const data = await Promise.all(orders.map(async (order) => ({
             ...order,
-            items: itemsStmt.all(order.id),
-        }));
+            items: await (0, db_1.query)("SELECT * FROM order_items WHERE order_id = $1", [order.id]),
+        })));
         res.json(data);
     }
     catch (error) {

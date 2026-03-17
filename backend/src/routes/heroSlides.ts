@@ -1,13 +1,18 @@
 import { Router } from "express";
-import { db } from "../lib/db";
+import { query } from "../lib/db";
 
 const router = Router();
 
-router.get("/", (_req, res, next) => {
+router.get("/", async (_req, res, next) => {
   try {
-    const slides = db
-      .prepare("SELECT * FROM hero_slides WHERE is_active = 1 ORDER BY position ASC")
-      .all();
+    const slides = await query(
+      `SELECT id, position, label, image_url, title, subtitle, button_text, button_link,
+              CASE WHEN is_active THEN 1 ELSE 0 END as is_active,
+              created_at, updated_at
+       FROM hero_slides
+       WHERE is_active = TRUE
+       ORDER BY position ASC`,
+    );
     res.json(slides);
   } catch (error) {
     next(error);

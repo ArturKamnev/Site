@@ -11,11 +11,9 @@ const authRequired = async (req, res, next) => {
         }
         const token = authHeader.replace("Bearer ", "");
         const payload = (0, jwt_1.verifyToken)(token);
-        const user = db_1.db
-            .prepare(`SELECT u.id, u.email, u.name, u.role_id as roleId, r.name as roleName
-         FROM users u JOIN roles r ON r.id = u.role_id
-         WHERE u.id = ?`)
-            .get(payload.userId);
+        const user = await (0, db_1.queryOne)(`SELECT u.id, u.email, u.name, u.role_id as "roleId", r.name as "roleName"
+       FROM users u JOIN roles r ON r.id = u.role_id
+       WHERE u.id = $1`, [payload.userId]);
         if (!user) {
             return res.status(401).json({ message: "Unauthorized" });
         }
@@ -41,11 +39,9 @@ const optionalAuth = async (req, _res, next) => {
         }
         const token = authHeader.replace("Bearer ", "");
         const payload = (0, jwt_1.verifyToken)(token);
-        const user = db_1.db
-            .prepare(`SELECT u.id, u.email, u.name, u.role_id as roleId, r.name as roleName
-         FROM users u JOIN roles r ON r.id = u.role_id
-         WHERE u.id = ?`)
-            .get(payload.userId);
+        const user = await (0, db_1.queryOne)(`SELECT u.id, u.email, u.name, u.role_id as "roleId", r.name as "roleName"
+       FROM users u JOIN roles r ON r.id = u.role_id
+       WHERE u.id = $1`, [payload.userId]);
         if (user) {
             req.user = {
                 id: user.id,

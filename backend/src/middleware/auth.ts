@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { db } from "../lib/db";
+import { queryOne } from "../lib/db";
 import { verifyToken } from "../utils/jwt";
 
 export const authRequired = async (req: Request, res: Response, next: NextFunction) => {
@@ -12,15 +12,12 @@ export const authRequired = async (req: Request, res: Response, next: NextFuncti
     const token = authHeader.replace("Bearer ", "");
     const payload = verifyToken(token);
 
-    const user = db
-      .prepare(
-        `SELECT u.id, u.email, u.name, u.role_id as roleId, r.name as roleName
-         FROM users u JOIN roles r ON r.id = u.role_id
-         WHERE u.id = ?`,
-      )
-      .get(payload.userId) as
-      | { id: number; email: string; name: string; roleId: number; roleName: string }
-      | undefined;
+    const user = await queryOne<{ id: number; email: string; name: string; roleId: number; roleName: string }>(
+      `SELECT u.id, u.email, u.name, u.role_id as "roleId", r.name as "roleName"
+       FROM users u JOIN roles r ON r.id = u.role_id
+       WHERE u.id = $1`,
+      [payload.userId],
+    );
 
     if (!user) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -50,15 +47,12 @@ export const optionalAuth = async (req: Request, _res: Response, next: NextFunct
     const token = authHeader.replace("Bearer ", "");
     const payload = verifyToken(token);
 
-    const user = db
-      .prepare(
-        `SELECT u.id, u.email, u.name, u.role_id as roleId, r.name as roleName
-         FROM users u JOIN roles r ON r.id = u.role_id
-         WHERE u.id = ?`,
-      )
-      .get(payload.userId) as
-      | { id: number; email: string; name: string; roleId: number; roleName: string }
-      | undefined;
+    const user = await queryOne<{ id: number; email: string; name: string; roleId: number; roleName: string }>(
+      `SELECT u.id, u.email, u.name, u.role_id as "roleId", r.name as "roleName"
+       FROM users u JOIN roles r ON r.id = u.role_id
+       WHERE u.id = $1`,
+      [payload.userId],
+    );
 
     if (user) {
       req.user = {

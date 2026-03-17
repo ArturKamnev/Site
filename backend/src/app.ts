@@ -13,10 +13,8 @@ import adminRoutes from "./routes/admin";
 import favoriteRoutes from "./routes/favorites";
 import heroSlideRoutes from "./routes/heroSlides";
 import { errorHandler, notFoundHandler } from "./middleware/error";
-import { initDb } from "./lib/db";
 
 export const app = express();
-initDb();
 
 app.use(
   cors({

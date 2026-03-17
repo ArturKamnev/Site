@@ -19,9 +19,7 @@ const admin_1 = __importDefault(require("./routes/admin"));
 const favorites_1 = __importDefault(require("./routes/favorites"));
 const heroSlides_1 = __importDefault(require("./routes/heroSlides"));
 const error_1 = require("./middleware/error");
-const db_1 = require("./lib/db");
 exports.app = (0, express_1.default)();
-(0, db_1.initDb)();
 exports.app.use((0, cors_1.default)({
     origin: env_1.env.FRONTEND_URL,
 }));

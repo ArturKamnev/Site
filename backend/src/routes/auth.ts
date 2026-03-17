@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
-import { db } from "../lib/db";
+import { queryOne } from "../lib/db";
 import { authRequired } from "../middleware/auth";
 import { signToken } from "../utils/jwt";
 
@@ -27,26 +27,30 @@ const loginSchema = z.object({
 router.post("/register", async (req, res, next) => {
   try {
     const body = registerSchema.parse(req.body);
-    const exists = db.prepare("SELECT id FROM users WHERE email = ?").get(body.email) as
-      | { id: number }
-      | undefined;
+    const exists = await queryOne<{ id: number }>("SELECT id FROM users WHERE email = $1", [body.email]);
     if (exists) {
       return res.status(409).json({ message: "Email already in use" });
     }
 
-    const role = db.prepare("SELECT id, name FROM roles WHERE name = ?").get("user") as
-      | { id: number; name: string }
-      | undefined;
+    const role = await queryOne<{ id: number; name: string }>(
+      "SELECT id, name FROM roles WHERE name = $1",
+      ["user"],
+    );
     if (!role) {
       return res.status(500).json({ message: "Default role not found. Run seed." });
     }
 
     const passwordHash = await bcrypt.hash(body.password, 10);
-    const result = db
-      .prepare("INSERT INTO users (name, email, password_hash, role_id) VALUES (?, ?, ?, ?)")
-      .run(body.name, body.email, passwordHash, role.id);
+    const created = await queryOne<{ id: number }>(
+      "INSERT INTO users (name, email, password_hash, role_id) VALUES ($1, $2, $3, $4) RETURNING id",
+      [body.name, body.email, passwordHash, role.id],
+    );
 
-    const userId = Number(result.lastInsertRowid);
+    if (!created) {
+      return res.status(500).json({ message: "Could not create user" });
+    }
+
+    const userId = created.id;
     const token = signToken({ userId, roleId: role.id, roleName: role.name });
 
     return res.status(201).json({
@@ -66,15 +70,19 @@ router.post("/register", async (req, res, next) => {
 router.post("/login", async (req, res, next) => {
   try {
     const body = loginSchema.parse(req.body);
-    const user = db
-      .prepare(
-        `SELECT u.id, u.name, u.email, u.password_hash as passwordHash, u.role_id as roleId, r.name as roleName
-         FROM users u JOIN roles r ON r.id = u.role_id
-         WHERE u.email = ?`,
-      )
-      .get(body.email) as
-      | { id: number; name: string; email: string; passwordHash: string; roleId: number; roleName: string }
-      | undefined;
+    const user = await queryOne<{
+      id: number;
+      name: string;
+      email: string;
+      passwordHash: string;
+      roleId: number;
+      roleName: string;
+    }>(
+      `SELECT u.id, u.name, u.email, u.password_hash as "passwordHash", u.role_id as "roleId", r.name as "roleName"
+       FROM users u JOIN roles r ON r.id = u.role_id
+       WHERE u.email = $1`,
+      [body.email],
+    );
 
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });

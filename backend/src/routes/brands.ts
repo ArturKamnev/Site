@@ -1,42 +1,41 @@
 import { Router } from "express";
-import { db } from "../lib/db";
+import { query, queryOne } from "../lib/db";
 
 const router = Router();
 
-router.get("/", (req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
     const search = (req.query.search as string | undefined)?.trim();
-    const stmt = search
-      ? db.prepare(
+    const brands = search
+      ? await query(
           `SELECT b.*,
-                  (SELECT COUNT(*) FROM products p WHERE p.brand_id = b.id) as productsCount
+                  (SELECT COUNT(*)::int FROM products p WHERE p.brand_id = b.id) as "productsCount"
            FROM brands b
-           WHERE b.name LIKE ? OR b.description LIKE ?
+           WHERE b.name ILIKE $1 OR b.description ILIKE $2
            ORDER BY b.name ASC`,
+          [`%${search}%`, `%${search}%`],
         )
-      : db.prepare(
+      : await query(
           `SELECT b.*,
-                  (SELECT COUNT(*) FROM products p WHERE p.brand_id = b.id) as productsCount
+                  (SELECT COUNT(*)::int FROM products p WHERE p.brand_id = b.id) as "productsCount"
            FROM brands b
            ORDER BY b.name ASC`,
         );
-    const brands = search ? stmt.all(`%${search}%`, `%${search}%`) : stmt.all();
     res.json(brands);
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/:slug", (req, res, next) => {
+router.get("/:slug", async (req, res, next) => {
   try {
-    const brand = db
-      .prepare(
-        `SELECT b.*,
-                (SELECT COUNT(*) FROM products p WHERE p.brand_id = b.id) as productsCount
-         FROM brands b
-         WHERE b.slug = ?`,
-      )
-      .get(req.params.slug);
+    const brand = await queryOne(
+      `SELECT b.*,
+              (SELECT COUNT(*)::int FROM products p WHERE p.brand_id = b.id) as "productsCount"
+       FROM brands b
+       WHERE b.slug = $1`,
+      [req.params.slug],
+    );
 
     if (!brand) {
       return res.status(404).json({ message: "Brand not found" });
@@ -47,7 +46,7 @@ router.get("/:slug", (req, res, next) => {
   }
 });
 
-router.get("/:slug/products", (req, res, next) => {
+router.get("/:slug/products", async (req, res, next) => {
   try {
     const page = Math.max(Number(req.query.page ?? 1), 1);
     const pageSize = Math.min(Math.max(Number(req.query.pageSize ?? 12), 1), 60);
@@ -57,29 +56,33 @@ router.get("/:slug/products", (req, res, next) => {
     const manufacturer = (req.query.manufacturer as string | undefined)?.trim();
     const sort = (req.query.sort as string | undefined) ?? "new";
 
-    const brand = db.prepare("SELECT * FROM brands WHERE slug = ?").get(req.params.slug) as
-      | { id: number; slug: string }
-      | undefined;
+    const brand = await queryOne<{ id: number; slug: string }>(
+      "SELECT * FROM brands WHERE slug = $1",
+      [req.params.slug],
+    );
     if (!brand) {
       return res.status(404).json({ message: "Brand not found" });
     }
 
-    const where: string[] = ["p.brand_id = ?"];
+    const where: string[] = ["p.brand_id = $1"];
     const params: unknown[] = [brand.id];
 
     if (search) {
-      where.push("(p.name LIKE ? OR p.sku LIKE ? OR p.article LIKE ? OR p.part_id LIKE ?)");
+      const base = params.length + 1;
+      where.push(
+        `(p.name ILIKE $${base} OR p.sku ILIKE $${base + 1} OR p.article ILIKE $${base + 2} OR p.part_id ILIKE $${base + 3})`,
+      );
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
     if (inStock) {
-      where.push("p.stock > 0 AND p.is_available = 1");
+      where.push("p.stock > 0 AND p.is_available = TRUE");
     }
     if (categoryId) {
-      where.push("p.category_id = ?");
+      where.push(`p.category_id = $${params.length + 1}`);
       params.push(categoryId);
     }
     if (manufacturer) {
-      where.push("LOWER(p.manufacturer) = LOWER(?)");
+      where.push(`LOWER(p.manufacturer) = LOWER($${params.length + 1})`);
       params.push(manufacturer);
     }
 
@@ -93,46 +96,49 @@ router.get("/:slug/products", (req, res, next) => {
             : "p.created_at DESC";
 
     const whereSql = `WHERE ${where.join(" AND ")}`;
-    const total = db
-      .prepare(`SELECT COUNT(*) as count FROM products p ${whereSql}`)
-      .get(...params) as { count: number };
+    const total = await queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count FROM products p ${whereSql}`,
+      params,
+    );
 
-    const items = db
-      .prepare(
-        `SELECT p.*,
-                b.name as brandName, b.slug as brandSlug,
-                c.name as categoryName, c.slug as categorySlug
-         FROM products p
-         JOIN brands b ON b.id = p.brand_id
-         JOIN categories c ON c.id = p.category_id
-         ${whereSql}
-         ORDER BY ${orderBy}
-         LIMIT ? OFFSET ?`,
-      )
-      .all(...params, pageSize, (page - 1) * pageSize);
+    const items = await query(
+      `SELECT p.*,
+              CASE WHEN p.is_available THEN 1 ELSE 0 END as is_available,
+              b.name as "brandName", b.slug as "brandSlug",
+              c.name as "categoryName", c.slug as "categorySlug"
+       FROM products p
+       JOIN brands b ON b.id = p.brand_id
+       JOIN categories c ON c.id = p.category_id
+       ${whereSql}
+       ORDER BY ${orderBy}
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, pageSize, (page - 1) * pageSize],
+    );
 
-    const categories = db
-      .prepare(
-        `SELECT c.*, (SELECT COUNT(*) FROM products p WHERE p.category_id = c.id AND p.brand_id = ?) as productsCount
-         FROM categories c
-         WHERE EXISTS (SELECT 1 FROM products p WHERE p.category_id = c.id AND p.brand_id = ?)
-         ORDER BY c.name ASC`,
-      )
-      .all(brand.id, brand.id);
+    const categories = await query(
+      `SELECT c.*, (SELECT COUNT(*)::int FROM products p WHERE p.category_id = c.id AND p.brand_id = $1) as "productsCount"
+       FROM categories c
+       WHERE EXISTS (SELECT 1 FROM products p WHERE p.category_id = c.id AND p.brand_id = $2)
+       ORDER BY c.name ASC`,
+      [brand.id, brand.id],
+    );
 
-    const manufacturers = db
-      .prepare("SELECT DISTINCT manufacturer FROM products WHERE brand_id = ? AND manufacturer IS NOT NULL ORDER BY manufacturer ASC")
-      .all(brand.id)
+    const manufacturers = (await query<{ manufacturer: string }>(
+      "SELECT DISTINCT manufacturer FROM products WHERE brand_id = $1 AND manufacturer IS NOT NULL ORDER BY manufacturer ASC",
+      [brand.id],
+    ))
       .map((row) => (row as { manufacturer: string }).manufacturer);
+
+    const totalCount = Number(total?.count ?? 0);
 
     res.json({
       brand,
       filters: { categories, manufacturers },
       pagination: {
-        total: total.count,
+        total: totalCount,
         page,
         pageSize,
-        totalPages: Math.max(Math.ceil(total.count / pageSize), 1),
+        totalPages: Math.max(Math.ceil(totalCount / pageSize), 1),
       },
       items,
     });

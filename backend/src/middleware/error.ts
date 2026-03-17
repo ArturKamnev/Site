@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { DatabaseError } from "pg";
 import { ZodError } from "zod";
 
 export const notFoundHandler = (_req: Request, res: Response) => {
@@ -14,6 +15,18 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, _next: 
         message: issue.message,
       })),
     });
+  }
+
+  if (err instanceof DatabaseError) {
+    if (err.code === "23505") {
+      return res.status(409).json({ message: "Resource already exists" });
+    }
+    if (err.code === "23503") {
+      return res.status(409).json({ message: "Referenced resource does not exist" });
+    }
+    if (err.code === "22P02") {
+      return res.status(400).json({ message: "Invalid identifier or payload format" });
+    }
   }
 
   if (err instanceof Error) {

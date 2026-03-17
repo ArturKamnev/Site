@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authRequired } from "../middleware/auth";
-import { db } from "../lib/db";
+import { query, queryOne, withTransaction } from "../lib/db";
 
 const router = Router();
 const CART_MAX_QUANTITY = 99;
@@ -24,13 +24,17 @@ const syncSchema = z.object({
   ),
 });
 
-const ensureCart = (userId: number) => {
-  const cart = db.prepare("SELECT * FROM carts WHERE user_id = ?").get(userId) as
-    | { id: number; user_id: number }
-    | undefined;
+const ensureCart = async (userId: number) => {
+  const cart = await queryOne<{ id: number; user_id: number }>(
+    "SELECT * FROM carts WHERE user_id = $1",
+    [userId],
+  );
   if (cart) return cart;
-  const result = db.prepare("INSERT INTO carts (user_id) VALUES (?)").run(userId);
-  return { id: Number(result.lastInsertRowid), user_id: userId };
+  const created = await queryOne<{ id: number }>("INSERT INTO carts (user_id) VALUES ($1) RETURNING id", [userId]);
+  if (!created) {
+    throw new Error("Failed to create cart");
+  }
+  return { id: created.id, user_id: userId };
 };
 
 const parsePositiveInt = (raw: string) => {
@@ -39,11 +43,12 @@ const parsePositiveInt = (raw: string) => {
 };
 
 const getProductStock = (productId: number) =>
-  db.prepare("SELECT id, stock, is_available as isAvailable FROM products WHERE id = ?").get(productId) as
-    | { id: number; stock: number; isAvailable: number }
-    | undefined;
+  queryOne<{ id: number; stock: number; isAvailable: boolean }>(
+    'SELECT id, stock, is_available as "isAvailable" FROM products WHERE id = $1',
+    [productId],
+  );
 
-const getAvailableStock = (product: { stock: number; isAvailable: number }) =>
+const getAvailableStock = (product: { stock: number; isAvailable: boolean }) =>
   product.isAvailable ? Math.max(product.stock, 0) : 0;
 
 const stockExceededPayload = (productId: number, requestedQuantity: number, availableStock: number) => ({
@@ -56,25 +61,24 @@ const stockExceededPayload = (productId: number, requestedQuantity: number, avai
 
 router.use(authRequired);
 
-router.get("/", (req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
-    const cart = ensureCart(req.user!.id);
-    const items = db
-      .prepare(
-        `SELECT ci.*,
-                p.name, p.slug, p.price, p.image, p.sku, p.stock,
-                b.name as brandName,
-                c.name as categoryName
-         FROM cart_items ci
-         JOIN products p ON p.id = ci.product_id
-         JOIN brands b ON b.id = p.brand_id
-         JOIN categories c ON c.id = p.category_id
-         WHERE ci.cart_id = ?
-         ORDER BY ci.created_at DESC`,
-      )
-      .all(cart.id);
+    const cart = await ensureCart(req.user!.id);
+    const items = await query<{ price: number; quantity: number }>(
+      `SELECT ci.*,
+              p.name, p.slug, p.price, p.image, p.sku, p.stock,
+              b.name as "brandName",
+              c.name as "categoryName"
+       FROM cart_items ci
+       JOIN products p ON p.id = ci.product_id
+       JOIN brands b ON b.id = p.brand_id
+       JOIN categories c ON c.id = p.category_id
+       WHERE ci.cart_id = $1
+       ORDER BY ci.created_at DESC`,
+      [cart.id],
+    );
 
-    const total = (items as Array<{ price: number; quantity: number }>).reduce(
+    const total = items.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0,
     );
@@ -85,18 +89,19 @@ router.get("/", (req, res, next) => {
   }
 });
 
-router.post("/items", (req, res, next) => {
+router.post("/items", async (req, res, next) => {
   try {
     const body = addItemSchema.parse(req.body);
-    const cart = ensureCart(req.user!.id);
+    const cart = await ensureCart(req.user!.id);
 
-    const product = getProductStock(body.productId);
+    const product = await getProductStock(body.productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
     const availableStock = getAvailableStock(product);
 
-    const existing = db
-      .prepare("SELECT id, quantity FROM cart_items WHERE cart_id = ? AND product_id = ?")
-      .get(cart.id, body.productId) as { id: number; quantity: number } | undefined;
+    const existing = await queryOne<{ id: number; quantity: number }>(
+      "SELECT id, quantity FROM cart_items WHERE cart_id = $1 AND product_id = $2",
+      [cart.id, body.productId],
+    );
     const nextQuantity = (existing?.quantity ?? 0) + body.quantity;
 
     if (nextQuantity > availableStock) {
@@ -104,16 +109,16 @@ router.post("/items", (req, res, next) => {
     }
 
     if (existing) {
-      db.prepare("UPDATE cart_items SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
+      await query("UPDATE cart_items SET quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [
         nextQuantity,
         existing.id,
-      );
+      ]);
     } else {
-      db.prepare("INSERT INTO cart_items (cart_id, product_id, quantity) VALUES (?, ?, ?)").run(
+      await query("INSERT INTO cart_items (cart_id, product_id, quantity) VALUES ($1, $2, $3)", [
         cart.id,
         body.productId,
         body.quantity,
-      );
+      ]);
     }
 
     res.status(201).json({ message: "Added to cart" });
@@ -122,7 +127,7 @@ router.post("/items", (req, res, next) => {
   }
 });
 
-router.patch("/items/:itemId", (req, res, next) => {
+router.patch("/items/:itemId", async (req, res, next) => {
   try {
     const itemId = parsePositiveInt(req.params.itemId);
     if (!itemId) {
@@ -130,20 +135,19 @@ router.patch("/items/:itemId", (req, res, next) => {
     }
     const body = updateItemSchema.parse(req.body);
 
-    const item = db
-      .prepare(
-        `SELECT ci.id, ci.product_id as productId, c.user_id as userId
-         FROM cart_items ci
-         JOIN carts c ON c.id = ci.cart_id
-         WHERE ci.id = ?`,
-      )
-      .get(itemId) as { id: number; productId: number; userId: number } | undefined;
+    const item = await queryOne<{ id: number; productId: number; userId: number }>(
+      `SELECT ci.id, ci.product_id as "productId", c.user_id as "userId"
+       FROM cart_items ci
+       JOIN carts c ON c.id = ci.cart_id
+       WHERE ci.id = $1`,
+      [itemId],
+    );
 
     if (!item || item.userId !== req.user!.id) {
       return res.status(404).json({ message: "Cart item not found" });
     }
 
-    const product = getProductStock(item.productId);
+    const product = await getProductStock(item.productId);
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
     }
@@ -154,51 +158,51 @@ router.patch("/items/:itemId", (req, res, next) => {
         .json(stockExceededPayload(item.productId, body.quantity, availableStock));
     }
 
-    db.prepare("UPDATE cart_items SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
+    await query("UPDATE cart_items SET quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [
       body.quantity,
       itemId,
-    );
+    ]);
     res.json({ message: "Cart item updated" });
   } catch (error) {
     next(error);
   }
 });
 
-router.delete("/items/:itemId", (req, res, next) => {
+router.delete("/items/:itemId", async (req, res, next) => {
   try {
     const itemId = parsePositiveInt(req.params.itemId);
     if (!itemId) {
       return res.status(400).json({ message: "Invalid cart item id" });
     }
 
-    const item = db
-      .prepare(
-        `SELECT ci.id, c.user_id as userId
-         FROM cart_items ci
-         JOIN carts c ON c.id = ci.cart_id
-         WHERE ci.id = ?`,
-      )
-      .get(itemId) as { id: number; userId: number } | undefined;
+    const item = await queryOne<{ id: number; userId: number }>(
+      `SELECT ci.id, c.user_id as "userId"
+       FROM cart_items ci
+       JOIN carts c ON c.id = ci.cart_id
+       WHERE ci.id = $1`,
+      [itemId],
+    );
 
     if (!item || item.userId !== req.user!.id) {
       return res.status(404).json({ message: "Cart item not found" });
     }
 
-    db.prepare("DELETE FROM cart_items WHERE id = ?").run(itemId);
+    await query("DELETE FROM cart_items WHERE id = $1", [itemId]);
     res.json({ message: "Item removed from cart" });
   } catch (error) {
     next(error);
   }
 });
 
-router.post("/sync", (req, res, next) => {
+router.post("/sync", async (req, res, next) => {
   try {
     const body = syncSchema.parse(req.body);
-    const cart = ensureCart(req.user!.id);
+    const cart = await ensureCart(req.user!.id);
 
-    const existingRows = db
-      .prepare("SELECT id, product_id as productId, quantity FROM cart_items WHERE cart_id = ?")
-      .all(cart.id) as Array<{ id: number; productId: number; quantity: number }>;
+    const existingRows = await query<{ id: number; productId: number; quantity: number }>(
+      'SELECT id, product_id as "productId", quantity FROM cart_items WHERE cart_id = $1',
+      [cart.id],
+    );
     const existingByProduct = new Map(existingRows.map((row) => [row.productId, row]));
     const incomingByProduct = new Map<number, number>();
 
@@ -207,7 +211,7 @@ router.post("/sync", (req, res, next) => {
     }
 
     for (const [productId, incomingQuantity] of incomingByProduct) {
-      const product = getProductStock(productId);
+      const product = await getProductStock(productId);
       if (!product) continue;
 
       const current = existingByProduct.get(productId)?.quantity ?? 0;
@@ -220,36 +224,35 @@ router.post("/sync", (req, res, next) => {
       }
     }
 
-    const tx = db.transaction((items: Array<{ productId: number; quantity: number }>) => {
-      for (const item of items) {
-        const product = getProductStock(item.productId);
+    await withTransaction(async (client) => {
+      for (const item of body.items) {
+        const product = await getProductStock(item.productId);
         if (!product) continue;
 
         const existing = existingByProduct.get(item.productId);
         const nextQuantity = (existing?.quantity ?? 0) + item.quantity;
 
         if (existing) {
-          db.prepare("UPDATE cart_items SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(
-            nextQuantity,
-            existing.id,
+          await query(
+            "UPDATE cart_items SET quantity = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+            [nextQuantity, existing.id],
+            client,
           );
           existingByProduct.set(item.productId, { ...existing, quantity: nextQuantity });
         } else {
-          const result = db.prepare("INSERT INTO cart_items (cart_id, product_id, quantity) VALUES (?, ?, ?)").run(
-            cart.id,
-            item.productId,
-            nextQuantity,
+          const created = await queryOne<{ id: number }>(
+            "INSERT INTO cart_items (cart_id, product_id, quantity) VALUES ($1, $2, $3) RETURNING id",
+            [cart.id, item.productId, nextQuantity],
+            client,
           );
-          existingByProduct.set(item.productId, {
-            id: Number(result.lastInsertRowid),
-            productId: item.productId,
-            quantity: nextQuantity,
-          });
+          if (!created) {
+            continue;
+          }
+          existingByProduct.set(item.productId, { id: created.id, productId: item.productId, quantity: nextQuantity });
         }
       }
     });
 
-    tx(body.items);
     res.json({ message: "Cart synced" });
   } catch (error) {
     next(error);

@@ -1,123 +1,144 @@
-import fs from "node:fs";
-import path from "node:path";
-import Database from "better-sqlite3";
+import { Pool, type PoolClient } from "pg";
+import { env } from "../config/env";
 
-const dataDir = path.resolve(process.cwd(), "data");
-const dbPath = path.join(dataDir, "shop.db");
+const useSsl = env.DATABASE_SSL || env.NODE_ENV === "production";
 
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
+export const pool = new Pool({
+  connectionString: env.DATABASE_URL,
+  ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+});
 
-export const db = new Database(dbPath);
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
+const getExecutor = (client?: PoolClient) => client ?? pool;
 
-const hasColumn = (table: string, column: string) => {
-  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-  return columns.some((entry) => entry.name === column);
+export const query = async <T = Record<string, unknown>>(
+  sql: string,
+  params: unknown[] = [],
+  client?: PoolClient,
+) => {
+  const result = await getExecutor(client).query(sql, params);
+  return result.rows as T[];
 };
 
-const ensureColumn = (table: string, column: string, definition: string) => {
-  if (!hasColumn(table, column)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+export const queryOne = async <T = Record<string, unknown>>(
+  sql: string,
+  params: unknown[] = [],
+  client?: PoolClient,
+) => {
+  const rows = await query<T>(sql, params, client);
+  return rows[0];
+};
+
+export const execute = async (
+  sql: string,
+  params: unknown[] = [],
+  client?: PoolClient,
+) => {
+  const result = await getExecutor(client).query(sql, params);
+  return result.rowCount ?? 0;
+};
+
+export const withTransaction = async <T>(handler: (client: PoolClient) => Promise<T>) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await handler(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
 };
 
-export const initDb = () => {
-  db.exec(`
+export const initDb = async () => {
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS roles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL UNIQUE
     );
 
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
-      role_id INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (role_id) REFERENCES roles(id)
+      role_id INTEGER NOT NULL REFERENCES roles(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS brands (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       slug TEXT NOT NULL UNIQUE,
       logo_url TEXT,
       description TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       slug TEXT NOT NULL UNIQUE,
       description TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS products (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       slug TEXT NOT NULL UNIQUE,
       sku TEXT NOT NULL UNIQUE,
       article TEXT,
       part_id TEXT,
-      price REAL NOT NULL,
-      old_price REAL,
-      discount_percent REAL,
+      price DOUBLE PRECISION NOT NULL,
+      old_price DOUBLE PRECISION,
+      discount_percent DOUBLE PRECISION,
       image TEXT,
       description TEXT,
       manufacturer TEXT,
       stock INTEGER NOT NULL DEFAULT 0,
-      is_available INTEGER NOT NULL DEFAULT 1,
-      brand_id INTEGER NOT NULL,
-      category_id INTEGER NOT NULL,
+      is_available BOOLEAN NOT NULL DEFAULT TRUE,
+      brand_id INTEGER NOT NULL REFERENCES brands(id),
+      category_id INTEGER NOT NULL REFERENCES categories(id),
       specs_json TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (brand_id) REFERENCES brands(id),
-      FOREIGN KEY (category_id) REFERENCES categories(id)
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS product_images (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      product_id INTEGER NOT NULL,
+      id SERIAL PRIMARY KEY,
+      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
       url TEXT NOT NULL,
       alt TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS carts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL UNIQUE,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS cart_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cart_id INTEGER NOT NULL,
-      product_id INTEGER NOT NULL,
+      id SERIAL PRIMARY KEY,
+      cart_id INTEGER NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
+      product_id INTEGER NOT NULL REFERENCES products(id),
       quantity INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(cart_id, product_id),
-      FOREIGN KEY (cart_id) REFERENCES carts(id) ON DELETE CASCADE,
-      FOREIGN KEY (product_id) REFERENCES products(id)
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(cart_id, product_id)
     );
 
     CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER,
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       status TEXT NOT NULL DEFAULT 'PENDING',
       full_name TEXT NOT NULL,
       phone TEXT NOT NULL,
@@ -125,37 +146,32 @@ export const initDb = () => {
       comment TEXT,
       address TEXT,
       pickup_method TEXT,
-      total REAL NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      total DOUBLE PRECISION NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS order_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id INTEGER NOT NULL,
-      product_id INTEGER,
+      id SERIAL PRIMARY KEY,
+      order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+      product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
       snapshot_name TEXT NOT NULL,
       snapshot_sku TEXT NOT NULL,
-      price REAL NOT NULL,
+      price DOUBLE PRECISION NOT NULL,
       quantity INTEGER NOT NULL,
-      line_total REAL NOT NULL,
-      FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
+      line_total DOUBLE PRECISION NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS favorites (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
-      product_id INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(user_id, product_id),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, product_id)
     );
 
     CREATE TABLE IF NOT EXISTS hero_slides (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       position INTEGER NOT NULL UNIQUE,
       label TEXT NOT NULL,
       image_url TEXT NOT NULL,
@@ -163,10 +179,20 @@ export const initDb = () => {
       subtitle TEXT,
       button_text TEXT,
       button_link TEXT,
-      is_active INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    ALTER TABLE brands ADD COLUMN IF NOT EXISTS logo_url TEXT;
+    ALTER TABLE brands ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS old_price DOUBLE PRECISION;
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS discount_percent DOUBLE PRECISION;
+    ALTER TABLE hero_slides ADD COLUMN IF NOT EXISTS title TEXT;
+    ALTER TABLE hero_slides ADD COLUMN IF NOT EXISTS subtitle TEXT;
+    ALTER TABLE hero_slides ADD COLUMN IF NOT EXISTS button_text TEXT;
+    ALTER TABLE hero_slides ADD COLUMN IF NOT EXISTS button_link TEXT;
+    ALTER TABLE hero_slides ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 
     CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand_id);
     CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
@@ -177,14 +203,8 @@ export const initDb = () => {
     CREATE INDEX IF NOT EXISTS idx_favorites_product ON favorites(product_id);
     CREATE INDEX IF NOT EXISTS idx_hero_slides_active_position ON hero_slides(is_active, position);
   `);
+};
 
-  ensureColumn("brands", "logo_url", "logo_url TEXT");
-  ensureColumn("brands", "description", "description TEXT");
-  ensureColumn("products", "old_price", "old_price REAL");
-  ensureColumn("products", "discount_percent", "discount_percent REAL");
-  ensureColumn("hero_slides", "title", "title TEXT");
-  ensureColumn("hero_slides", "subtitle", "subtitle TEXT");
-  ensureColumn("hero_slides", "button_text", "button_text TEXT");
-  ensureColumn("hero_slides", "button_link", "button_link TEXT");
-  ensureColumn("hero_slides", "is_active", "is_active INTEGER NOT NULL DEFAULT 1");
+export const closeDb = async () => {
+  await pool.end();
 };
