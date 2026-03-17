@@ -1,20 +1,22 @@
-import { Link } from "react-router-dom";
+﻿import { Link } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
+import { useI18n } from "../i18n/I18nProvider";
 import { useFavoritesStore } from "../stores/favoritesStore";
 
 const FavoritesPage = () => {
+  const { t } = useI18n();
   const favorites = useFavoritesStore((state) => state.items);
 
   return (
     <section className="favorites-page">
       <div className="title-block">
-        <h1>Избранное</h1>
-        <p>Сохраненные товары для быстрого возврата к покупке.</p>
+        <h1>{t("favorites.title")}</h1>
+        <p>{t("favorites.description")}</p>
       </div>
 
       {!favorites.length ? (
         <div className="empty-state">
-          В избранном пока пусто. <Link to="/brands">Перейти в каталог</Link>
+          {t("favorites.empty")}. <Link to="/brands">{t("home.openCatalog")}</Link>
         </div>
       ) : null}
 

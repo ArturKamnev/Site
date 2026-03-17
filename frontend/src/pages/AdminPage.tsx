@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { useI18n } from "../i18n/I18nProvider";
 import { api } from "../lib/api";
 import type { Brand, Category, HeroSlide, Order, Product } from "../types";
 
@@ -47,13 +48,8 @@ const defaultSlideForm = {
   isActive: true,
 };
 
-const money = new Intl.NumberFormat("ru-RU", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
-
 const AdminPage = () => {
+  const { t, formatMoney } = useI18n();
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -65,6 +61,10 @@ const AdminPage = () => {
   const [categoryName, setCategoryName] = useState("");
   const [slideForm, setSlideForm] = useState(defaultSlideForm);
   const [discountDrafts, setDiscountDrafts] = useState<Record<number, string>>({});
+  const getStatusLabel = (status: string) =>
+    t(`status.${status.toLowerCase()}`) === `status.${status.toLowerCase()}`
+      ? status
+      : t(`status.${status.toLowerCase()}`);
 
   const load = async () => {
     const [d, p, b, c, o, s] = await Promise.all([
@@ -163,60 +163,60 @@ const AdminPage = () => {
   return (
     <section className="admin-page">
       <div className="title-block">
-        <h1>Admin panel</h1>
-        <p>Manage products, discounts, brands, categories, hero slides, and order statuses.</p>
+        <h1>{t("admin.title")}</h1>
+        <p>{t("admin.description")}</p>
       </div>
 
       <div className="stats-grid">
         <article className="surface stat-card">
-          <span>Users</span>
+          <span>{t("admin.users")}</span>
           <strong>{dashboard?.users ?? 0}</strong>
         </article>
         <article className="surface stat-card">
-          <span>Products</span>
+          <span>{t("admin.products")}</span>
           <strong>{dashboard?.products ?? 0}</strong>
         </article>
         <article className="surface stat-card">
-          <span>Brands</span>
+          <span>{t("admin.brands")}</span>
           <strong>{dashboard?.brands ?? 0}</strong>
         </article>
         <article className="surface stat-card">
-          <span>Categories</span>
+          <span>{t("admin.categories")}</span>
           <strong>{dashboard?.categories ?? 0}</strong>
         </article>
         <article className="surface stat-card">
-          <span>Slides</span>
+          <span>{t("admin.slides")}</span>
           <strong>{dashboard?.heroSlides ?? heroSlides.length}</strong>
         </article>
         <article className="surface stat-card">
-          <span>Orders</span>
+          <span>{t("admin.orders")}</span>
           <strong>{dashboard?.orders ?? 0}</strong>
         </article>
       </div>
 
-      <h2>Create product</h2>
+      <h2>{t("admin.createProduct")}</h2>
       <form className="form surface" onSubmit={createProduct}>
         <input
           value={productForm.name}
           onChange={(event) => setProductForm((prev) => ({ ...prev, name: event.target.value }))}
-          placeholder="Product name"
+          placeholder={t("admin.productName")}
           required
         />
         <input
           value={productForm.sku}
           onChange={(event) => setProductForm((prev) => ({ ...prev, sku: event.target.value }))}
-          placeholder="SKU"
+          placeholder={t("common.sku")}
           required
         />
         <input
           value={productForm.article}
           onChange={(event) => setProductForm((prev) => ({ ...prev, article: event.target.value }))}
-          placeholder="Article"
+          placeholder={t("common.article")}
         />
         <input
           value={productForm.partId}
           onChange={(event) => setProductForm((prev) => ({ ...prev, partId: event.target.value }))}
-          placeholder="Part ID"
+          placeholder={t("productPage.partId")}
         />
         <input
           type="number"
@@ -224,7 +224,7 @@ const AdminPage = () => {
           step="0.01"
           value={productForm.price}
           onChange={(event) => setProductForm((prev) => ({ ...prev, price: Number(event.target.value) }))}
-          placeholder="Current price"
+          placeholder={t("admin.currentPrice")}
         />
         <input
           type="number"
@@ -234,24 +234,24 @@ const AdminPage = () => {
           onChange={(event) =>
             setProductForm((prev) => ({ ...prev, discountPercent: Number(event.target.value) || 0 }))
           }
-          placeholder="Discount (%)"
+          placeholder={t("admin.discountPercent")}
         />
         <input
           value={productForm.image}
           onChange={(event) => setProductForm((prev) => ({ ...prev, image: event.target.value }))}
-          placeholder="Image URL"
+          placeholder={t("admin.imageUrl")}
         />
         <input
           value={productForm.manufacturer}
           onChange={(event) => setProductForm((prev) => ({ ...prev, manufacturer: event.target.value }))}
-          placeholder="Manufacturer"
+          placeholder={t("common.manufacturer")}
         />
         <input
           type="number"
           min={0}
           value={productForm.stock}
           onChange={(event) => setProductForm((prev) => ({ ...prev, stock: Number(event.target.value) }))}
-          placeholder="Stock"
+          placeholder={t("admin.stock")}
         />
         <select
           value={productForm.brandId}
@@ -276,23 +276,23 @@ const AdminPage = () => {
         <textarea
           value={productForm.description}
           onChange={(event) => setProductForm((prev) => ({ ...prev, description: event.target.value }))}
-          placeholder="Description"
+          placeholder={t("productPage.description")}
         />
-        <button type="submit">Create product</button>
+        <button type="submit">{t("admin.createProductSubmit")}</button>
       </form>
 
-      <h2>Products and discounts</h2>
+      <h2>{t("admin.productsAndDiscounts")}</h2>
       <div className="table-wrap surface">
         <table>
           <thead>
             <tr>
               <th>ID</th>
-              <th>Name</th>
-              <th>SKU</th>
-              <th>Price</th>
-              <th>Discount</th>
-              <th>Brand</th>
-              <th>Actions</th>
+              <th>{t("common.name")}</th>
+              <th>{t("common.sku")}</th>
+              <th>{t("common.price")}</th>
+              <th>{t("admin.discount")}</th>
+              <th>{t("admin.brand")}</th>
+              <th>{t("common.actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -303,8 +303,8 @@ const AdminPage = () => {
                 <td>{product.sku}</td>
                 <td>
                   <div className="table-price-cell">
-                    <strong>{money.format(product.price)}</strong>
-                    {product.old_price ? <small>{money.format(product.old_price)}</small> : null}
+                    <strong>{formatMoney(product.price)}</strong>
+                    {product.old_price ? <small>{formatMoney(product.old_price)}</small> : null}
                   </div>
                 </td>
                 <td>
@@ -329,10 +329,10 @@ const AdminPage = () => {
                         applyProductDiscount(product.id, Number(discountDrafts[product.id] ?? product.discount_percent ?? 0))
                       }
                     >
-                      Apply
+                      {t("admin.applyDiscount")}
                     </button>
                     <button type="button" className="ghost-btn" onClick={() => applyProductDiscount(product.id, 0)}>
-                      Remove
+                      {t("admin.removeDiscount")}
                     </button>
                   </div>
                 </td>
@@ -343,7 +343,7 @@ const AdminPage = () => {
                     className="danger"
                     onClick={() => api.delete(`/admin/products/${product.id}`).then(load)}
                   >
-                    Delete
+                    {t("common.delete")}
                   </button>
                 </td>
               </tr>
@@ -352,41 +352,41 @@ const AdminPage = () => {
         </table>
       </div>
 
-      <h2>Hero slides</h2>
+      <h2>{t("admin.heroSlides")}</h2>
       <div className="two-col">
         <form className="form surface" onSubmit={submitHeroSlide}>
-          <h3>Add slide</h3>
+          <h3>{t("admin.addSlide")}</h3>
           <input
             value={slideForm.label}
             onChange={(event) => setSlideForm((prev) => ({ ...prev, label: event.target.value }))}
-            placeholder="Label"
+            placeholder={t("admin.label")}
             required
           />
           <input
             value={slideForm.imageUrl}
             onChange={(event) => setSlideForm((prev) => ({ ...prev, imageUrl: event.target.value }))}
-            placeholder="Image URL"
+            placeholder={t("admin.imageUrl")}
             required
           />
           <input
             value={slideForm.title}
             onChange={(event) => setSlideForm((prev) => ({ ...prev, title: event.target.value }))}
-            placeholder="Title (optional)"
+            placeholder={t("admin.slideTitle")}
           />
           <textarea
             value={slideForm.subtitle}
             onChange={(event) => setSlideForm((prev) => ({ ...prev, subtitle: event.target.value }))}
-            placeholder="Subtitle (optional)"
+            placeholder={t("admin.slideSubtitle")}
           />
           <input
             value={slideForm.buttonText}
             onChange={(event) => setSlideForm((prev) => ({ ...prev, buttonText: event.target.value }))}
-            placeholder="Button text (optional)"
+            placeholder={t("admin.buttonText")}
           />
           <input
             value={slideForm.buttonLink}
             onChange={(event) => setSlideForm((prev) => ({ ...prev, buttonLink: event.target.value }))}
-            placeholder="Button link (optional)"
+            placeholder={t("admin.buttonLink")}
           />
           <label className="inline-checkbox">
             <input
@@ -394,13 +394,13 @@ const AdminPage = () => {
               checked={slideForm.isActive}
               onChange={(event) => setSlideForm((prev) => ({ ...prev, isActive: event.target.checked }))}
             />
-            Active
+            {t("common.active")}
           </label>
-          <button type="submit">Create slide</button>
+          <button type="submit">{t("admin.createSlide")}</button>
         </form>
 
         <div className="form surface">
-          <h3>Current slides</h3>
+          <h3>{t("admin.currentSlides")}</h3>
           {heroSlides.map((slide) => (
             <article key={slide.id} className="hero-slide-admin-item">
               <img src={slide.image_url} alt={slide.label} />
@@ -408,53 +408,53 @@ const AdminPage = () => {
                 <strong>
                   #{slide.position} {slide.label}
                 </strong>
-                <p className="muted">{slide.title || "No title"}</p>
-                <small>{slide.is_active ? "Active" : "Hidden"}</small>
+                <p className="muted">{slide.title || t("admin.noTitle")}</p>
+                <small>{slide.is_active ? t("common.active") : t("common.hidden")}</small>
               </div>
               <div className="inline-row">
                 <button type="button" className="ghost-btn" onClick={() => toggleHeroSlide(slide)}>
-                  {slide.is_active ? "Hide" : "Show"}
+                  {slide.is_active ? t("admin.hide") : t("admin.show")}
                 </button>
                 <button type="button" className="danger" onClick={() => deleteHeroSlide(slide.id)}>
-                  Delete
+                  {t("common.delete")}
                 </button>
               </div>
             </article>
           ))}
-          {!heroSlides.length ? <p className="empty-state">No slides yet.</p> : null}
+          {!heroSlides.length ? <p className="empty-state">{t("admin.noSlides")}</p> : null}
         </div>
       </div>
 
-      <h2>Brands and categories</h2>
+      <h2>{t("admin.brandsAndCategories")}</h2>
       <div className="two-col">
         <form className="form surface" onSubmit={submitBrand}>
-          <h3>{brandForm.id ? "Edit brand" : "Add brand"}</h3>
+          <h3>{brandForm.id ? t("admin.editBrand") : t("admin.addBrand")}</h3>
           <input
             value={brandForm.name}
             onChange={(event) => setBrandForm((prev) => ({ ...prev, name: event.target.value }))}
-            placeholder="Brand name"
+            placeholder={t("admin.brandName")}
             required
           />
           <input
             value={brandForm.slug}
             onChange={(event) => setBrandForm((prev) => ({ ...prev, slug: event.target.value }))}
-            placeholder="Slug (optional)"
+            placeholder={t("admin.slugOptional")}
           />
           <input
             value={brandForm.logoUrl}
             onChange={(event) => setBrandForm((prev) => ({ ...prev, logoUrl: event.target.value }))}
-            placeholder="Logo URL"
+            placeholder={t("admin.imageUrl")}
           />
           <textarea
             value={brandForm.description}
             onChange={(event) => setBrandForm((prev) => ({ ...prev, description: event.target.value }))}
-            placeholder="Brand description"
+            placeholder={t("admin.brandDescription")}
           />
           <div className="inline-row">
-            <button type="submit">{brandForm.id ? "Save brand" : "Add brand"}</button>
+            <button type="submit">{brandForm.id ? t("admin.saveBrand") : t("admin.addBrandSubmit")}</button>
             {brandForm.id ? (
               <button type="button" className="ghost-btn" onClick={() => setBrandForm(defaultBrandForm)}>
-                Cancel
+                {t("common.cancel")}
               </button>
             ) : null}
           </div>
@@ -467,14 +467,14 @@ const AdminPage = () => {
               />
               <div>
                 <strong>{brand.name}</strong>
-                <p className="muted">{brand.description || "No description"}</p>
+                <p className="muted">{brand.description || t("admin.noBrandDescription")}</p>
               </div>
               <div className="inline-row">
                 <button type="button" className="ghost-btn" onClick={() => startBrandEdit(brand)}>
-                  Edit
+                  {t("common.edit")}
                 </button>
                 <button type="button" className="danger" onClick={() => api.delete(`/admin/brands/${brand.id}`).then(load)}>
-                  Delete
+                  {t("common.delete")}
                 </button>
               </div>
             </div>
@@ -491,34 +491,34 @@ const AdminPage = () => {
             });
           }}
         >
-          <h3>Add category</h3>
+          <h3>{t("admin.addCategory")}</h3>
           <input
             value={categoryName}
             onChange={(event) => setCategoryName(event.target.value)}
-            placeholder="Category name"
+            placeholder={t("admin.categoryName")}
           />
-          <button type="submit">Add category</button>
+          <button type="submit">{t("admin.addCategorySubmit")}</button>
           {categories.map((category) => (
             <div key={category.id} className="inline-row">
               <span>{category.name}</span>
               <button type="button" className="danger" onClick={() => api.delete(`/admin/categories/${category.id}`).then(load)}>
-                Delete
+                {t("common.delete")}
               </button>
             </div>
           ))}
         </form>
       </div>
 
-      <h2>Orders</h2>
+      <h2>{t("admin.orders")}</h2>
       <div className="orders">
         {orders.map((order) => (
           <article key={order.id} className="surface order-card">
             <div className="order-head">
               <h3>#{order.id}</h3>
-              <span className="meta-chip">{order.status}</span>
+              <span className="meta-chip">{getStatusLabel(order.status)}</span>
             </div>
             <p className="muted">
-              {order.full_name} | {money.format(order.total)}
+              {order.full_name} | {formatMoney(order.total)}
             </p>
             <select
               value={order.status}
@@ -528,11 +528,11 @@ const AdminPage = () => {
                   .then(load)
               }
             >
-              <option value="PENDING">PENDING</option>
-              <option value="PROCESSING">PROCESSING</option>
-              <option value="SHIPPED">SHIPPED</option>
-              <option value="COMPLETED">COMPLETED</option>
-              <option value="CANCELED">CANCELED</option>
+              <option value="PENDING">{getStatusLabel("PENDING")}</option>
+              <option value="PROCESSING">{getStatusLabel("PROCESSING")}</option>
+              <option value="SHIPPED">{getStatusLabel("SHIPPED")}</option>
+              <option value="COMPLETED">{getStatusLabel("COMPLETED")}</option>
+              <option value="CANCELED">{getStatusLabel("CANCELED")}</option>
             </select>
           </article>
         ))}

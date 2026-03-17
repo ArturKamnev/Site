@@ -1,30 +1,71 @@
+﻿import axios from "axios";
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useI18n } from "../i18n/I18nProvider";
 import { useAuthStore } from "../stores/authStore";
 import { useCartStore } from "../stores/cartStore";
 import { useFavoritesStore } from "../stores/favoritesStore";
 import type { Product } from "../types";
 
-const money = new Intl.NumberFormat("ru-RU", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
-
 const CartPage = () => {
+  const { t, formatMoney } = useI18n();
   const { items, total, updateQuantity, removeItem } = useCartStore();
   const toggleFavorite = useFavoritesStore((state) => state.toggleFavorite);
   const isFavorite = useFavoritesStore((state) => state.isFavorite);
   const user = useAuthStore((state) => state.user);
+  const [errorMessage, setErrorMessage] = useState("");
   const totalCount = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  const resolveStock = (item: (typeof items)[number]) => item.stock ?? item.product?.stock ?? 0;
+
+  const getStockErrorMessage = (error: unknown, fallbackStock: number) => {
+    if (axios.isAxiosError(error)) {
+      const payload = error.response?.data as
+        | { code?: string; availableStock?: number; message?: string }
+        | undefined;
+      if (payload?.code === "CART_STOCK_EXCEEDED") {
+        return t("cart.stockLimitError", { stock: payload.availableStock ?? fallbackStock });
+      }
+    }
+    return t("errors.generic");
+  };
+
+  const onIncrease = async (item: (typeof items)[number]) => {
+    const stock = resolveStock(item);
+    const nextQuantity = item.quantity + 1;
+    if (stock <= 0 || nextQuantity > stock) {
+      setErrorMessage(t("cart.stockLimitError", { stock }));
+      return;
+    }
+
+    try {
+      await updateQuantity(item.id || item.product_id || 0, nextQuantity);
+      setErrorMessage("");
+    } catch (error) {
+      setErrorMessage(getStockErrorMessage(error, stock));
+    }
+  };
+
+  const onDecrease = async (item: (typeof items)[number]) => {
+    const nextQuantity = Math.max(1, item.quantity - 1);
+    if (nextQuantity === item.quantity) return;
+    try {
+      await updateQuantity(item.id || item.product_id || 0, nextQuantity);
+      setErrorMessage("");
+    } catch {
+      setErrorMessage(t("errors.generic"));
+    }
+  };
 
   return (
     <section className="cart-page">
       <div className="title-block">
-        <h1>Корзина</h1>
-        <p>Проверьте состав заказа, количество позиций и итог перед оформлением.</p>
+        <h1>{t("cart.title")}</h1>
+        <p>{t("cart.description")}</p>
       </div>
 
-      {!items.length ? <p className="empty-state">Корзина пока пуста.</p> : null}
+      {!items.length ? <p className="empty-state">{t("cart.empty")}</p> : null}
+      {errorMessage ? <p className="error">{errorMessage}</p> : null}
 
       <div className="cart-layout">
         <div className="cart-list">
@@ -33,6 +74,7 @@ const CartPage = () => {
             const unitPrice = item.price || item.product?.price || 0;
             const image = item.image || item.product?.image;
             const title = item.name || item.product?.name;
+            const stock = resolveStock(item);
             const rawProduct = (item.product || {
               id: productId,
               name: title,
@@ -40,7 +82,7 @@ const CartPage = () => {
               sku: item.sku,
               price: unitPrice,
               image,
-              stock: item.stock || 0,
+              stock,
               is_available: 1,
               brandName: item.brandName,
               categoryName: item.categoryName,
@@ -53,33 +95,28 @@ const CartPage = () => {
                 <div className="cart-item-info">
                   <div className="cart-item-head">
                     <h3>{title}</h3>
-                    <p className="price">{money.format(unitPrice)}</p>
+                    <p className="price">{formatMoney(unitPrice)}</p>
                   </div>
-                  <p className="muted">SKU: {item.sku || item.product?.sku}</p>
-                  <div className="qty-row">
-                    <button
-                      type="button"
-                      onClick={() => updateQuantity(item.id || productId, Math.max(1, item.quantity - 1))}
-                    >
+                  <p className="muted">{t("common.sku")}: {item.sku || item.product?.sku}</p>
+                  <div className="qty-row" aria-label={t("cart.quantityAria")}>
+                    <button type="button" onClick={() => onDecrease(item)}>
                       -
                     </button>
                     <span>{item.quantity}</span>
-                    <button
-                      type="button"
-                      onClick={() => updateQuantity(item.id || productId, Math.min(99, item.quantity + 1))}
-                    >
+                    <button type="button" onClick={() => onIncrease(item)} disabled={stock <= 0 || item.quantity >= stock}>
                       +
                     </button>
+                    <small className="muted">{t("cart.stockLimitHint", { stock })}</small>
                   </div>
                   <div className="cart-item-actions">
                     <button type="button" className="ghost-btn" onClick={() => removeItem(item.id || productId)}>
-                      Удалить
+                      {t("cart.remove")}
                     </button>
                     <button type="button" className="ghost-btn" onClick={() => toggleFavorite(rawProduct)}>
-                      {isFavorite(productId) ? "В избранном" : "В избранное"}
+                      {isFavorite(productId) ? t("productCard.inFavorites") : t("productCard.addFavorite")}
                     </button>
                     <Link className="ghost-btn" to={productLink}>
-                      К товару
+                      {t("cart.toProduct")}
                     </Link>
                   </div>
                 </div>
@@ -89,41 +126,41 @@ const CartPage = () => {
         </div>
 
         <aside className="surface cart-summary">
-          <h3>Сводка заказа</h3>
+          <h3>{t("cart.summary")}</h3>
           <div className="summary-row">
-            <span>Товаров:</span>
+            <span>{t("cart.products")}:</span>
             <strong>{totalCount}</strong>
           </div>
           <div className="summary-row">
-            <span>Позиций:</span>
+            <span>{t("cart.positions")}:</span>
             <strong>{items.length}</strong>
           </div>
           <div className="summary-row">
-            <span>Скидка:</span>
-            <strong>{money.format(0)}</strong>
+            <span>{t("cart.discount")}:</span>
+            <strong>{formatMoney(0)}</strong>
           </div>
           <div className="summary-row summary-total">
-            <span>Итого:</span>
-            <strong>{money.format(total)}</strong>
+            <span>{t("common.total")}:</span>
+            <strong>{formatMoney(total)}</strong>
           </div>
           <Link className="checkout-btn" to="/checkout">
-            Перейти к оформлению
+            {t("cart.goCheckout")}
           </Link>
         </aside>
       </div>
 
       <div className="cart-extra-grid">
         <article className="surface">
-          <h3>Доставка</h3>
-          <p className="muted">Курьерская доставка по городу и отправка по СНГ транспортными компаниями.</p>
+          <h3>{t("cart.delivery")}</h3>
+          <p className="muted">{t("cart.deliveryText")}</p>
         </article>
         <article className="surface">
-          <h3>Оплата</h3>
-          <p className="muted">Безналичный расчет для B2B и оплата картой/наличными для частных клиентов.</p>
+          <h3>{t("cart.payment")}</h3>
+          <p className="muted">{t("cart.paymentText")}</p>
         </article>
         <article className="surface">
-          <h3>Контакты покупателя</h3>
-          <p className="muted">{user ? `${user.name} (${user.email})` : "Авторизуйтесь для автозаполнения данных."}</p>
+          <h3>{t("cart.customerContacts")}</h3>
+          <p className="muted">{user ? `${user.name} (${user.email})` : t("cart.loginToPrefill")}</p>
         </article>
       </div>
     </section>

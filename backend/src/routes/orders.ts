@@ -44,6 +44,15 @@ router.post("/", optionalAuth, (req, res, next) => {
       return res.status(400).json({ message: "No items to checkout" });
     }
 
+    const normalizedItemsMap = new Map<number, number>();
+    for (const item of sourceItems) {
+      normalizedItemsMap.set(item.productId, (normalizedItemsMap.get(item.productId) ?? 0) + item.quantity);
+    }
+    const normalizedItems = Array.from(normalizedItemsMap.entries()).map(([productId, quantity]) => ({
+      productId,
+      quantity,
+    }));
+
     const tx = db.transaction(() => {
       const orderItemRows: Array<{
         productId: number;
@@ -54,11 +63,30 @@ router.post("/", optionalAuth, (req, res, next) => {
         lineTotal: number;
       }> = [];
 
-      for (const item of sourceItems) {
+      for (const item of normalizedItems) {
         const product = db
-          .prepare("SELECT id, name, sku, price FROM products WHERE id = ?")
-          .get(item.productId) as { id: number; name: string; sku: string; price: number } | undefined;
+          .prepare("SELECT id, name, sku, price, stock, is_available as isAvailable FROM products WHERE id = ?")
+          .get(item.productId) as
+          | { id: number; name: string; sku: string; price: number; stock: number; isAvailable: number }
+          | undefined;
         if (!product) continue;
+
+        const availableStock = product.isAvailable ? Math.max(product.stock, 0) : 0;
+        if (item.quantity > availableStock) {
+          const error = new Error("Requested quantity exceeds available stock") as Error & {
+            status: number;
+            code: string;
+            productId: number;
+            requestedQuantity: number;
+            availableStock: number;
+          };
+          error.status = 409;
+          error.code = "STOCK_EXCEEDED";
+          error.productId = item.productId;
+          error.requestedQuantity = item.quantity;
+          error.availableStock = availableStock;
+          throw error;
+        }
 
         orderItemRows.push({
           productId: product.id,
@@ -108,6 +136,13 @@ router.post("/", optionalAuth, (req, res, next) => {
           row.quantity,
           row.lineTotal,
         );
+      }
+
+      const decreaseStock = db.prepare(
+        "UPDATE products SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      );
+      for (const row of orderItemRows) {
+        decreaseStock.run(row.quantity, row.productId);
       }
 
       if (req.user) {

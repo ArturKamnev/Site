@@ -1,30 +1,33 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useI18n } from "../i18n/I18nProvider";
 import { useAuthStore } from "../stores/authStore";
 import { useCartStore } from "../stores/cartStore";
 import { useFavoritesStore } from "../stores/favoritesStore";
 
 const routeLabels: Record<string, string> = {
-  brands: "Brands",
-  brand: "Brand",
-  products: "Products",
-  product: "Product",
-  cart: "Cart",
-  favorites: "Favorites",
-  checkout: "Checkout",
-  login: "Login",
-  register: "Register",
-  profile: "Profile",
-  admin: "Admin",
+  brands: "common.brands",
+  brand: "common.brand",
+  products: "common.products",
+  product: "common.product",
+  cart: "common.cart",
+  favorites: "common.favorites",
+  checkout: "common.checkout",
+  login: "common.login",
+  register: "common.register",
+  profile: "common.profile",
+  admin: "common.admin",
 };
 
-const formatBreadcrumbLabel = (segment: string) => {
+const formatBreadcrumbLabel = (segment: string, t: (key: string) => string) => {
   const normalized = decodeURIComponent(segment);
-  return routeLabels[normalized] ?? normalized.replace(/-/g, " ");
+  const labelKey = routeLabels[normalized];
+  return labelKey ? t(labelKey) : normalized.replace(/-/g, " ");
 };
 
 const Layout = () => {
+  const { language, setLanguage, t } = useI18n();
   const { user, logout } = useAuthStore();
   const loadCart = useCartStore((state) => state.loadCart);
   const cartItems = useCartStore((state) => state.items);
@@ -34,6 +37,8 @@ const Layout = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const isPrivilegedUser = Boolean(user && (user.role === "admin" || user.role === "employee"));
 
   const segments = location.pathname.split("/").filter(Boolean);
   const breadcrumbs = useMemo(
@@ -72,92 +77,130 @@ const Layout = () => {
       <header className="site-header">
         <div className="main-header">
           <div className="container main-header-inner">
-            <div className="mobile-header-row">
+            <div className="header-left">
               <Link to="/" className="brand-title">
                 <span className="brand-title-mark">TP</span>
                 <span>
-                  Truck Parts
-                  <small>Auto parts marketplace</small>
+                  {t("layout.brandName")}
+                  <small>{t("layout.brandTagline")}</small>
                 </span>
               </Link>
 
-              <div className="mobile-actions">
-                <NavLink to="/favorites" className="mobile-icon-btn" aria-label="Favorites">
-                  F
-                  <span className="counter">{favorites.length}</span>
-                </NavLink>
-                <NavLink to="/cart" className="mobile-icon-btn" aria-label="Cart">
-                  C
-                  <span className="counter">{cartItems.length}</span>
-                </NavLink>
-                <button
-                  type="button"
-                  className="mobile-icon-btn burger-btn"
-                  aria-label="Open menu"
-                  onClick={() => setMobileMenuOpen(true)}
-                >
-                  ≡
-                </button>
-              </div>
+              <NavLink to="/brands" className="catalog-btn desktop-only">
+                {t("layout.catalog")}
+              </NavLink>
             </div>
-
-            <NavLink to="/brands" className="catalog-btn desktop-only">
-              Catalog
-            </NavLink>
 
             <form className="header-search desktop-only" onSubmit={onSearchSubmit}>
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search by brand, SKU, article"
-                aria-label="Search parts"
+                placeholder={t("layout.searchPlaceholder")}
+                aria-label={t("layout.searchAria")}
               />
-              <button type="submit">Search</button>
+              <button type="submit">{t("common.search")}</button>
             </form>
 
             <nav className="header-actions desktop-only">
               {user ? (
                 <NavLink to="/profile" className="header-action-link">
-                  Profile
+                  {t("common.profile")}
                 </NavLink>
               ) : (
                 <NavLink to="/login" className="header-action-link">
-                  Login
+                  {t("common.login")}
                 </NavLink>
               )}
 
               <NavLink to="/favorites" className="header-action-link">
-                Favorites
+                {t("common.favorites")}
                 <span className="counter">{favorites.length}</span>
               </NavLink>
 
               <NavLink to="/cart" className="header-action-link">
-                Cart
+                {t("common.cart")}
                 <span className="counter">{cartItems.length}</span>
               </NavLink>
 
-              {user && (user.role === "admin" || user.role === "employee") ? (
+              {isPrivilegedUser ? (
                 <NavLink to="/admin" className="header-action-link">
-                  Admin
+                  {t("common.admin")}
                 </NavLink>
               ) : null}
 
               {user ? (
                 <button type="button" className="link-btn" onClick={onLogout}>
-                  Logout
+                  {t("common.logout")}
                 </button>
               ) : null}
+
+              <div className="language-switch" role="group" aria-label={t("common.language")}
+              >
+                <button
+                  type="button"
+                  className={`language-btn ${language === "en" ? "active" : ""}`}
+                  onClick={() => setLanguage("en")}
+                >
+                  EN
+                </button>
+                <button
+                  type="button"
+                  className={`language-btn ${language === "ru" ? "active" : ""}`}
+                  onClick={() => setLanguage("ru")}
+                >
+                  RU
+                </button>
+              </div>
             </nav>
+
+            <div className="mobile-actions">
+              <button
+                type="button"
+                className={`mobile-icon-btn language-chip ${language === "en" ? "active" : ""}`}
+                onClick={() => setLanguage(language === "en" ? "ru" : "en")}
+                aria-label={t("common.language")}
+              >
+                {language.toUpperCase()}
+              </button>
+              <NavLink to="/favorites" className="mobile-icon-btn" aria-label={t("common.favorites")}>
+                F
+                <span className="counter">{favorites.length}</span>
+              </NavLink>
+              <NavLink to="/cart" className="mobile-icon-btn" aria-label={t("common.cart")}>
+                C
+                <span className="counter">{cartItems.length}</span>
+              </NavLink>
+              <button
+                type="button"
+                className="mobile-icon-btn burger-btn"
+                aria-label={t("layout.openMenu")}
+                onClick={() => setMobileMenuOpen(true)}
+              >
+                &#8801;
+              </button>
+            </div>
+          </div>
+
+          <div className="container mobile-search-row">
+            <form className="header-search" onSubmit={onSearchSubmit}>
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder={t("layout.searchPlaceholder")}
+                aria-label={t("layout.searchAria")}
+              />
+              <button type="submit">{t("common.search")}</button>
+            </form>
           </div>
         </div>
 
         <nav className="section-nav desktop-only">
           <div className="container section-nav-inner">
-            <NavLink to="/">Home</NavLink>
-            <NavLink to="/brands">Brands</NavLink>
-            <NavLink to="/favorites">Favorites</NavLink>
-            <NavLink to="/cart">Cart</NavLink>
-            <NavLink to="/profile">Profile</NavLink>
+            <NavLink to="/">{t("common.home")}</NavLink>
+            <NavLink to="/brands">{t("common.brands")}</NavLink>
+            <NavLink to="/favorites">{t("common.favorites")}</NavLink>
+            <NavLink to="/cart">{t("common.cart")}</NavLink>
+            <NavLink to="/profile">{t("common.profile")}</NavLink>
           </div>
         </nav>
 
@@ -167,9 +210,26 @@ const Layout = () => {
         />
         <aside className={`mobile-drawer ${mobileMenuOpen ? "open" : ""}`}>
           <div className="mobile-drawer-head">
-            <strong>Menu</strong>
+            <strong>{t("layout.mobileMenuTitle")}</strong>
             <button type="button" className="mobile-icon-btn" onClick={() => setMobileMenuOpen(false)}>
-              x
+              &times;
+            </button>
+          </div>
+
+          <div className="mobile-language-row">
+            <button
+              type="button"
+              className={`language-btn ${language === "en" ? "active" : ""}`}
+              onClick={() => setLanguage("en")}
+            >
+              {t("common.english")}
+            </button>
+            <button
+              type="button"
+              className={`language-btn ${language === "ru" ? "active" : ""}`}
+              onClick={() => setLanguage("ru")}
+            >
+              {t("common.russian")}
             </button>
           </div>
 
@@ -177,25 +237,25 @@ const Layout = () => {
             <input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search by brand, SKU, article"
+              placeholder={t("layout.searchPlaceholder")}
             />
-            <button type="submit">Search</button>
+            <button type="submit">{t("common.search")}</button>
           </form>
 
           <nav className="mobile-nav-links">
-            <NavLink to="/">Home</NavLink>
-            <NavLink to="/brands">Brands</NavLink>
-            <NavLink to="/favorites">Favorites</NavLink>
-            <NavLink to="/cart">Cart</NavLink>
-            <NavLink to="/profile">Profile</NavLink>
-            {user && (user.role === "admin" || user.role === "employee") ? <NavLink to="/admin">Admin</NavLink> : null}
-            {!user ? <NavLink to="/login">Login</NavLink> : null}
-            {!user ? <NavLink to="/register">Register</NavLink> : null}
+            <NavLink to="/">{t("common.home")}</NavLink>
+            <NavLink to="/brands">{t("common.brands")}</NavLink>
+            <NavLink to="/favorites">{t("common.favorites")}</NavLink>
+            <NavLink to="/cart">{t("common.cart")}</NavLink>
+            <NavLink to="/profile">{t("common.profile")}</NavLink>
+            {isPrivilegedUser ? <NavLink to="/admin">{t("common.admin")}</NavLink> : null}
+            {!user ? <NavLink to="/login">{t("common.login")}</NavLink> : null}
+            {!user ? <NavLink to="/register">{t("common.register")}</NavLink> : null}
           </nav>
 
           {user ? (
             <button type="button" className="danger" onClick={onLogout}>
-              Logout
+              {t("common.logout")}
             </button>
           ) : null}
         </aside>
@@ -204,14 +264,14 @@ const Layout = () => {
       <main className="content">
         <div className="container">
           <div className="breadcrumbs">
-            <Link to="/">Home</Link>
+            <Link to="/">{t("common.home")}</Link>
             {breadcrumbs.map((crumb) => (
               <span key={crumb.href}>
                 <span className="breadcrumbs-separator">/</span>
                 {crumb.isCurrent ? (
-                  <span>{formatBreadcrumbLabel(crumb.segment)}</span>
+                  <span>{formatBreadcrumbLabel(crumb.segment, t)}</span>
                 ) : (
-                  <Link to={crumb.href}>{formatBreadcrumbLabel(crumb.segment)}</Link>
+                  <Link to={crumb.href}>{formatBreadcrumbLabel(crumb.segment, t)}</Link>
                 )}
               </span>
             ))}
@@ -223,20 +283,20 @@ const Layout = () => {
       <footer className="site-footer">
         <div className="container site-footer-inner">
           <div>
-            <h4>Truck Parts Store</h4>
-            <p>Parts for commercial vehicles, workshops, and fleet operators.</p>
+            <h4>{t("layout.footerTitle")}</h4>
+            <p>{t("layout.footerDescription")}</p>
           </div>
           <div>
-            <h5>Navigation</h5>
+            <h5>{t("layout.footerNavigation")}</h5>
             <div className="footer-links">
-              <Link to="/brands">Brands</Link>
-              <Link to="/favorites">Favorites</Link>
-              <Link to="/cart">Cart</Link>
-              <Link to="/profile">Profile</Link>
+              <Link to="/brands">{t("common.brands")}</Link>
+              <Link to="/favorites">{t("common.favorites")}</Link>
+              <Link to="/cart">{t("common.cart")}</Link>
+              <Link to="/profile">{t("common.profile")}</Link>
             </div>
           </div>
           <div>
-            <h5>Contacts</h5>
+            <h5>{t("layout.footerContacts")}</h5>
             <p>+996 (700) 123-456</p>
             <p>support@truckparts.local</p>
           </div>

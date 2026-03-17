@@ -17,6 +17,16 @@ const errorHandler = (err, _req, res, _next) => {
         });
     }
     if (err instanceof Error) {
+        const appError = err;
+        if (appError.status && appError.status >= 400 && appError.status <= 599) {
+            return res.status(appError.status).json({
+                message: appError.message,
+                code: appError.code,
+                productId: appError.productId,
+                requestedQuantity: appError.requestedQuantity,
+                availableStock: appError.availableStock,
+            });
+        }
         return res.status(500).json({ message: err.message });
     }
     return res.status(500).json({ message: "Internal server error" });

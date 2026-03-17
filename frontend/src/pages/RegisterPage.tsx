@@ -1,6 +1,7 @@
 ﻿import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useI18n } from "../i18n/I18nProvider";
 import { api } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useCartStore } from "../stores/cartStore";
@@ -8,6 +9,7 @@ import { useFavoritesStore } from "../stores/favoritesStore";
 import type { User } from "../types";
 
 const RegisterPage = () => {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const setAuth = useAuthStore((state) => state.setAuth);
   const [form, setForm] = useState({
@@ -30,43 +32,43 @@ const RegisterPage = () => {
       ]);
       navigate("/");
     } catch {
-      setError("Ошибка регистрации");
+      setError(t("register.errorFailed"));
     }
   };
 
   return (
     <section className="auth-wrap">
       <div className="surface auth-card">
-        <h1>Регистрация</h1>
-        <p className="muted">Создайте аккаунт для быстрого оформления и отслеживания заказов.</p>
+        <h1>{t("register.title")}</h1>
+        <p className="muted">{t("register.description")}</p>
         <form className="form" onSubmit={onSubmit}>
           <input
-            placeholder="Имя"
+            placeholder={t("register.name")}
             value={form.name}
             onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
           />
           <input
-            placeholder="Email"
+            placeholder={t("common.email")}
             value={form.email}
             onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
           />
           <input
-            placeholder="Пароль"
+            placeholder={t("register.password")}
             type="password"
             value={form.password}
             onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
           />
           <input
-            placeholder="Подтверждение пароля"
+            placeholder={t("register.confirmPassword")}
             type="password"
             value={form.confirmPassword}
             onChange={(event) => setForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
           />
           {error ? <p className="error">{error}</p> : null}
-          <button type="submit">Создать аккаунт</button>
+          <button type="submit">{t("register.submit")}</button>
         </form>
         <p>
-          Уже зарегистрированы? <Link to="/login">Вход</Link>
+          {t("register.hasAccount")} <Link to="/login">{t("register.goLogin")}</Link>
         </p>
       </div>
     </section>

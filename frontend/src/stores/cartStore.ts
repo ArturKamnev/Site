@@ -36,6 +36,12 @@ const saveGuestCart = (items: GuestCartItem[]) => {
   localStorage.setItem(GUEST_KEY, JSON.stringify(items));
 };
 
+const clampQuantity = (quantity: number, stock: number) => {
+  const limit = Math.max(0, Math.min(stock, 99));
+  if (limit <= 0) return 0;
+  return Math.max(1, Math.min(quantity, limit));
+};
+
 export const useCartStore = create<CartState>((set, get) => ({
   items: [],
   total: 0,
@@ -49,12 +55,22 @@ export const useCartStore = create<CartState>((set, get) => ({
     }
 
     const guest = loadGuestCart();
-    const items: CartItem[] = guest.map((entry) => ({
+    const sanitizedGuest = guest
+      .map((entry) => ({
+        ...entry,
+        quantity: clampQuantity(entry.quantity, entry.product.stock),
+      }))
+      .filter((entry) => entry.quantity > 0);
+    if (sanitizedGuest.length !== guest.length) {
+      saveGuestCart(sanitizedGuest);
+    }
+
+    const items: CartItem[] = sanitizedGuest.map((entry) => ({
       product_id: entry.productId,
       quantity: entry.quantity,
       product: entry.product,
     }));
-    const total = guest.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const total = sanitizedGuest.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
     set({ items, total, hydrated: true });
   },
   addItem: async (product, quantity = 1) => {
@@ -65,12 +81,17 @@ export const useCartStore = create<CartState>((set, get) => ({
       return;
     }
 
+    const normalizedQuantity = clampQuantity(quantity, product.stock);
+    if (normalizedQuantity <= 0) {
+      return;
+    }
+
     const guest = loadGuestCart();
     const existing = guest.find((entry) => entry.productId === product.id);
     if (existing) {
-      existing.quantity = Math.min(99, existing.quantity + quantity);
+      existing.quantity = clampQuantity(existing.quantity + normalizedQuantity, product.stock);
     } else {
-      guest.push({ productId: product.id, quantity, product });
+      guest.push({ productId: product.id, quantity: normalizedQuantity, product });
     }
     saveGuestCart(guest);
     await get().loadCart();
@@ -84,7 +105,9 @@ export const useCartStore = create<CartState>((set, get) => ({
     }
 
     const guest = loadGuestCart().map((item) =>
-      item.productId === idOrProductId ? { ...item, quantity } : item,
+      item.productId === idOrProductId
+        ? { ...item, quantity: clampQuantity(quantity, item.product.stock) || item.quantity }
+        : item,
     );
     saveGuestCart(guest);
     await get().loadCart();
@@ -106,8 +129,15 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (!token) return;
     const guest = loadGuestCart();
     if (guest.length) {
+      const normalizedItems = guest
+        .map((item) => ({
+          productId: item.productId,
+          quantity: clampQuantity(item.quantity, item.product.stock),
+        }))
+        .filter((item) => item.quantity > 0);
+
       await api.post("/cart/sync", {
-        items: guest.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+        items: normalizedItems,
       });
       saveGuestCart([]);
     }

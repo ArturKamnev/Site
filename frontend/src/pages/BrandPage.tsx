@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
+import { useI18n } from "../i18n/I18nProvider";
 import { api } from "../lib/api";
 import type { Brand, Category, Product } from "../types";
 
@@ -20,6 +21,7 @@ type BrandProductsResponse = {
 };
 
 const BrandPage = () => {
+  const { t } = useI18n();
   const { slug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<BrandProductsResponse | null>(null);
@@ -49,25 +51,25 @@ const BrandPage = () => {
       <div className="brand-hero surface">
         <img
           src={data?.brand.logo_url || "https://dummyimage.com/500x180/e2e8f0/0f172a&text=Brand"}
-          alt={data?.brand.name ?? "Бренд"}
+          alt={data?.brand.name ?? t("brandPage.fallbackBrand")}
         />
         <div>
-          <h1>{data?.brand.name ?? "Бренд"}</h1>
-          <p>{data?.brand.description || "Выберите подходящие запчасти по параметрам ниже."}</p>
+          <h1>{data?.brand.name ?? t("brandPage.fallbackBrand")}</h1>
+          <p>{data?.brand.description || t("brandPage.fallbackDescription")}</p>
         </div>
       </div>
 
       <div className="catalog-layout">
         <aside className="surface filter-panel">
-          <h3>Фильтры</h3>
+          <h3>{t("brandPage.filters")}</h3>
           <div className="filter-stack">
             <input
-              placeholder="Поиск по названию, SKU, артикулу"
+              placeholder={t("brandPage.searchPlaceholder")}
               value={searchParams.get("search") ?? ""}
               onChange={(event) => updateParam("search", event.target.value)}
             />
             <select value={searchParams.get("categoryId") ?? ""} onChange={(event) => updateParam("categoryId", event.target.value)}>
-              <option value="">Все категории</option>
+              <option value="">{t("brandPage.allCategories")}</option>
               {data?.filters.categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
@@ -75,7 +77,7 @@ const BrandPage = () => {
               ))}
             </select>
             <select value={searchParams.get("manufacturer") ?? ""} onChange={(event) => updateParam("manufacturer", event.target.value)}>
-              <option value="">Все производители</option>
+              <option value="">{t("brandPage.allManufacturers")}</option>
               {data?.filters.manufacturers.map((manufacturer) => (
                 <option key={manufacturer} value={manufacturer}>
                   {manufacturer}
@@ -88,19 +90,19 @@ const BrandPage = () => {
                 checked={searchParams.get("inStock") === "true"}
                 onChange={(event) => updateParam("inStock", event.target.checked ? "true" : "")}
               />
-              Только в наличии
+              {t("common.inStockOnly")}
             </label>
           </div>
         </aside>
 
         <div>
           <div className="surface catalog-toolbar">
-            <p>Найдено товаров: {data?.pagination.total ?? 0}</p>
+            <p>{t("common.itemsFound", { count: data?.pagination.total ?? 0 })}</p>
             <select value={searchParams.get("sort") ?? "new"} onChange={(event) => updateParam("sort", event.target.value)}>
-              <option value="new">Сначала новые</option>
-              <option value="price_asc">Цена по возрастанию</option>
-              <option value="price_desc">Цена по убыванию</option>
-              <option value="name_asc">Название A-Z</option>
+              <option value="new">{t("brandPage.sortNewest")}</option>
+              <option value="price_asc">{t("brandPage.sortPriceAsc")}</option>
+              <option value="price_desc">{t("brandPage.sortPriceDesc")}</option>
+              <option value="name_asc">{t("brandPage.sortNameAsc")}</option>
             </select>
           </div>
 
@@ -110,7 +112,7 @@ const BrandPage = () => {
             ))}
           </div>
 
-          {!data?.items.length ? <p className="empty-state">По выбранным фильтрам товары не найдены.</p> : null}
+          {!data?.items.length ? <p className="empty-state">{t("brandPage.empty")}</p> : null}
 
           <div className="pagination">
             <button
@@ -118,17 +120,15 @@ const BrandPage = () => {
               disabled={!data || data.pagination.page <= 1}
               onClick={() => updateParam("page", String((data?.pagination.page ?? 1) - 1))}
             >
-              Назад
+              {t("common.back")}
             </button>
-            <span>
-              Страница {data?.pagination.page ?? 1} из {data?.pagination.totalPages ?? 1}
-            </span>
+            <span>{t("brandPage.pageOf", { page: data?.pagination.page ?? 1, totalPages: data?.pagination.totalPages ?? 1 })}</span>
             <button
               type="button"
               disabled={!data || (data.pagination.page ?? 1) >= (data.pagination.totalPages ?? 1)}
               onClick={() => updateParam("page", String((data?.pagination.page ?? 1) + 1))}
             >
-              Вперед
+              {t("common.next")}
             </button>
           </div>
         </div>

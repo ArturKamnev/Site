@@ -1,9 +1,11 @@
 ﻿import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useI18n } from "../i18n/I18nProvider";
 import { api } from "../lib/api";
 import type { Brand } from "../types";
 
 const BrandsPage = () => {
+  const { t } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [brands, setBrands] = useState<Brand[]>([]);
   const search = searchParams.get("search") ?? "";
@@ -17,8 +19,8 @@ const BrandsPage = () => {
   return (
     <section className="catalog-page">
       <div className="title-block">
-        <h1>Каталог брендов</h1>
-        <p>Выберите бренд, чтобы перейти к товарам и настроить фильтры по категориям, производителям и наличию.</p>
+        <h1>{t("brands.title")}</h1>
+        <p>{t("brands.description")}</p>
       </div>
 
       <div className="surface panel-row">
@@ -28,7 +30,7 @@ const BrandsPage = () => {
             const value = event.target.value;
             setSearchParams(value.trim() ? { search: value } : {});
           }}
-          placeholder="Поиск бренда"
+          placeholder={t("brands.searchPlaceholder")}
         />
       </div>
 
@@ -38,14 +40,14 @@ const BrandsPage = () => {
             <img src={brand.logo_url || "https://dummyimage.com/280x120/e2e8f0/0f172a&text=Brand"} alt={brand.name} />
             <div className="card-body">
               <h3>{brand.name}</h3>
-              <p className="muted">{brand.description || "Оригинальные и совместимые решения для грузовой техники."}</p>
-              <small className="meta-chip">{brand.productsCount || 0} товаров</small>
+              <p className="muted">{brand.description || t("brands.noDescription")}</p>
+              <small className="meta-chip">{t("brands.productsCount", { count: brand.productsCount || 0 })}</small>
             </div>
           </Link>
         ))}
       </div>
 
-      {!brands.length ? <p className="empty-state">По вашему запросу бренды не найдены.</p> : null}
+      {!brands.length ? <p className="empty-state">{t("brands.empty")}</p> : null}
     </section>
   );
 };

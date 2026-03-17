@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useI18n } from "../i18n/I18nProvider";
 import { api } from "../lib/api";
 import { useCartStore } from "../stores/cartStore";
 import { useFavoritesStore } from "../stores/favoritesStore";
@@ -8,16 +9,12 @@ import type { Product } from "../types";
 
 type ProductFull = Product & { images: Array<{ id: number; url: string; alt?: string }> };
 
-const money = new Intl.NumberFormat("ru-RU", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
-
 const ProductPage = () => {
+  const { t, formatMoney } = useI18n();
   const { slug } = useParams();
   const [product, setProduct] = useState<ProductFull | null>(null);
   const addItem = useCartStore((state) => state.addItem);
+  const cartItems = useCartStore((state) => state.items);
   const toggleFavorite = useFavoritesStore((state) => state.toggleFavorite);
   const isFavorite = useFavoritesStore((state) => (product ? state.isFavorite(product.id) : false));
   const addRecentlyViewed = useRecentlyViewedStore((state) => state.addItem);
@@ -29,12 +26,15 @@ const ProductPage = () => {
     });
   }, [slug, addRecentlyViewed]);
 
-  if (!product) return <p className="empty-state">Loading product...</p>;
+  if (!product) return <p className="empty-state">{t("productPage.loading")}</p>;
 
   const hasDiscount =
     (product.discount_percent ?? 0) > 0 &&
     Boolean(product.old_price) &&
     Number(product.old_price) > product.price;
+
+  const quantityInCart = cartItems.find((item) => (item.product_id ?? item.product?.id) === product.id)?.quantity ?? 0;
+  const canAddToCart = product.stock > 0 && quantityInCart < product.stock;
 
   return (
     <section className="product-view">
@@ -47,35 +47,43 @@ const ProductPage = () => {
         <h1>{product.name}</h1>
 
         <div className="product-meta-row">
-          <span className="meta-chip">Article: {product.article || "-"}</span>
-          <span className="meta-chip">SKU: {product.sku}</span>
-          <span className="meta-chip">Part ID: {product.part_id || "-"}</span>
+          <span className="meta-chip">{t("common.article")}: {product.article || "-"}</span>
+          <span className="meta-chip">{t("common.sku")}: {product.sku}</span>
+          <span className="meta-chip">{t("productPage.partId")}: {product.part_id || "-"}</span>
         </div>
 
         <div className="price-stack">
-          <p className="price">{money.format(product.price)}</p>
-          {hasDiscount ? <p className="old-price">{money.format(Number(product.old_price))}</p> : null}
+          <p className="price">{formatMoney(product.price)}</p>
+          {hasDiscount ? <p className="old-price">{formatMoney(Number(product.old_price))}</p> : null}
           {hasDiscount ? <span className="discount-badge">-{product.discount_percent}%</span> : null}
         </div>
 
         <p className="muted">
-          Category: {product.categoryName || "-"} | Manufacturer: {product.manufacturer || "-"}
+          {t("productPage.categoryManufacturer", {
+            category: product.categoryName || "-",
+            manufacturer: product.manufacturer || "-",
+          })}
         </p>
 
-        <div className="stock-badge">{product.stock > 0 ? `In stock: ${product.stock}` : "Out of stock"}</div>
-
-        <div className="product-main-actions">
-          <button type="button" onClick={() => addItem(product, 1)} disabled={product.stock <= 0}>
-            Add to cart
-          </button>
-          <button type="button" className="ghost-btn" onClick={() => toggleFavorite(product)}>
-            {isFavorite ? "Remove favorite" : "Add favorite"}
-          </button>
+        <div className="stock-badge">
+          {product.stock > 0 ? t("productPage.inStock", { stock: product.stock }) : t("productPage.outOfStock")}
         </div>
 
+        <div className="product-main-actions">
+          <button type="button" onClick={() => addItem(product, 1)} disabled={!canAddToCart}>
+            {t("productCard.addToCart")}
+          </button>
+          <button type="button" className="ghost-btn" onClick={() => toggleFavorite(product)}>
+            {isFavorite ? t("productPage.removeFavorite") : t("productPage.addFavorite")}
+          </button>
+        </div>
+        {product.stock > 0 && quantityInCart >= product.stock ? (
+          <p className="muted">{t("cart.stockLimitHint", { stock: product.stock })}</p>
+        ) : null}
+
         <div className="description-card">
-          <h3>Description</h3>
-          <p>{product.description || "No description yet."}</p>
+          <h3>{t("productPage.description")}</h3>
+          <p>{product.description || t("common.noDescription")}</p>
         </div>
       </div>
     </section>

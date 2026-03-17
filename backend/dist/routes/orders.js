@@ -37,14 +37,32 @@ router.post("/", auth_1.optionalAuth, (req, res, next) => {
         if (!sourceItems.length) {
             return res.status(400).json({ message: "No items to checkout" });
         }
+        const normalizedItemsMap = new Map();
+        for (const item of sourceItems) {
+            normalizedItemsMap.set(item.productId, (normalizedItemsMap.get(item.productId) ?? 0) + item.quantity);
+        }
+        const normalizedItems = Array.from(normalizedItemsMap.entries()).map(([productId, quantity]) => ({
+            productId,
+            quantity,
+        }));
         const tx = db_1.db.transaction(() => {
             const orderItemRows = [];
-            for (const item of sourceItems) {
+            for (const item of normalizedItems) {
                 const product = db_1.db
-                    .prepare("SELECT id, name, sku, price FROM products WHERE id = ?")
+                    .prepare("SELECT id, name, sku, price, stock, is_available as isAvailable FROM products WHERE id = ?")
                     .get(item.productId);
                 if (!product)
                     continue;
+                const availableStock = product.isAvailable ? Math.max(product.stock, 0) : 0;
+                if (item.quantity > availableStock) {
+                    const error = new Error("Requested quantity exceeds available stock");
+                    error.status = 409;
+                    error.code = "STOCK_EXCEEDED";
+                    error.productId = item.productId;
+                    error.requestedQuantity = item.quantity;
+                    error.availableStock = availableStock;
+                    throw error;
+                }
                 orderItemRows.push({
                     productId: product.id,
                     snapshotName: product.name,
@@ -67,6 +85,10 @@ router.post("/", auth_1.optionalAuth, (req, res, next) => {
          VALUES (?, ?, ?, ?, ?, ?, ?)`);
             for (const row of orderItemRows) {
                 insertOrderItem.run(orderId, row.productId, row.snapshotName, row.snapshotSku, row.price, row.quantity, row.lineTotal);
+            }
+            const decreaseStock = db_1.db.prepare("UPDATE products SET stock = stock - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+            for (const row of orderItemRows) {
+                decreaseStock.run(row.quantity, row.productId);
             }
             if (req.user) {
                 const cart = db_1.db.prepare("SELECT id FROM carts WHERE user_id = ?").get(req.user.id);

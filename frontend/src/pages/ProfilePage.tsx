@@ -1,23 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useI18n } from "../i18n/I18nProvider";
 import { api } from "../lib/api";
 import { useAuthStore } from "../stores/authStore";
 import { useFavoritesStore } from "../stores/favoritesStore";
 import { useRecentlyViewedStore } from "../stores/recentlyViewedStore";
 import type { Order } from "../types";
 
-const money = new Intl.NumberFormat("ru-RU", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
-
-const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
 const ProfilePage = () => {
+  const { t, formatMoney, formatDateTime } = useI18n();
   const user = useAuthStore((state) => state.user);
   const [orders, setOrders] = useState<Order[]>([]);
   const favorites = useFavoritesStore((state) => state.items);
@@ -32,10 +23,11 @@ const ProfilePage = () => {
   }, [loadFavorites]);
 
   const totalOrders = orders.length;
-  const totalSpent = useMemo(
-    () => orders.reduce((sum, order) => sum + order.total, 0),
-    [orders],
-  );
+  const totalSpent = useMemo(() => orders.reduce((sum, order) => sum + order.total, 0), [orders]);
+  const getStatusLabel = (status: string) =>
+    t(`status.${status.toLowerCase()}`) === `status.${status.toLowerCase()}`
+      ? status
+      : t(`status.${status.toLowerCase()}`);
 
   return (
     <section className="profile-page">
@@ -46,24 +38,24 @@ const ProfilePage = () => {
           <span className="meta-chip">{user?.role}</span>
 
           <nav>
-            <a href="#profile-data">Данные профиля</a>
-            <a href="#profile-orders">История заказов</a>
-            <a href="#profile-favorites">Избранное</a>
-            <a href="#profile-recent">Недавно просмотренные</a>
+            <a href="#profile-data">{t("profile.data")}</a>
+            <a href="#profile-orders">{t("profile.orders")}</a>
+            <a href="#profile-favorites">{t("profile.favorites")}</a>
+            <a href="#profile-recent">{t("profile.recentlyViewed")}</a>
           </nav>
 
           <div className="sidebar-stats">
             <article>
               <strong>{totalOrders}</strong>
-              <span>заказов</span>
+              <span>{t("profile.ordersCount")}</span>
             </article>
             <article>
               <strong>{favorites.length}</strong>
-              <span>избранных</span>
+              <span>{t("profile.favoritesCount")}</span>
             </article>
             <article>
-              <strong>{money.format(totalSpent)}</strong>
-              <span>сумма покупок</span>
+              <strong>{formatMoney(totalSpent)}</strong>
+              <span>{t("profile.totalSpent")}</span>
             </article>
           </div>
         </aside>
@@ -71,41 +63,41 @@ const ProfilePage = () => {
         <div className="profile-main">
           <article id="profile-data" className="surface profile-card">
             <div className="section-head">
-              <h2>Данные пользователя</h2>
+              <h2>{t("profile.userData")}</h2>
             </div>
             <div className="profile-info-grid">
               <div>
-                <span>Имя</span>
+                <span>{t("profile.name")}</span>
                 <strong>{user?.name}</strong>
               </div>
               <div>
-                <span>Email</span>
+                <span>{t("common.email")}</span>
                 <strong>{user?.email}</strong>
               </div>
               <div>
-                <span>Роль</span>
+                <span>{t("profile.role")}</span>
                 <strong>{user?.role}</strong>
               </div>
               <div>
-                <span>Настройки</span>
-                <strong>Редактирование профиля будет доступно в следующем обновлении</strong>
+                <span>{t("profile.settings")}</span>
+                <strong>{t("profile.settingsHint")}</strong>
               </div>
             </div>
           </article>
 
           <article id="profile-orders" className="surface profile-card">
             <div className="section-head">
-              <h2>История заказов</h2>
+              <h2>{t("profile.orders")}</h2>
             </div>
             <div className="orders">
               {orders.map((order) => (
                 <article key={order.id} className="order-card">
                   <div className="order-head">
-                    <h3>Заказ #{order.id}</h3>
-                    <span className="meta-chip">{order.status}</span>
+                    <h3>{t("admin.orderById", { id: order.id })}</h3>
+                    <span className="meta-chip">{getStatusLabel(order.status)}</span>
                   </div>
                   <p className="muted">
-                    {dateFormatter.format(new Date(order.created_at))} | {money.format(order.total)}
+                    {formatDateTime(order.created_at)} | {formatMoney(order.total)}
                   </p>
                   <ul>
                     {order.items.map((item) => (
@@ -117,23 +109,23 @@ const ProfilePage = () => {
                 </article>
               ))}
             </div>
-            {!orders.length ? <p className="empty-state">У вас пока нет оформленных заказов.</p> : null}
+            {!orders.length ? <p className="empty-state">{t("profile.emptyOrders")}</p> : null}
           </article>
 
           <article id="profile-favorites" className="surface profile-card">
             <div className="section-head">
-              <h2>Избранное</h2>
-              <Link to="/favorites">Открыть полный список</Link>
+              <h2>{t("profile.favorites")}</h2>
+              <Link to="/favorites">{t("profile.openAllFavorites")}</Link>
             </div>
             {!favorites.length ? (
-              <p className="empty-state">Вы еще не добавляли товары в избранное.</p>
+              <p className="empty-state">{t("profile.emptyFavorites")}</p>
             ) : (
               <div className="mini-products-grid">
                 {favorites.slice(0, 6).map((item) => (
                   <Link key={item.id} to={`/product/${item.slug}`} className="mini-product-card">
                     <img src={item.image || "https://dummyimage.com/200x140/e2e8f0/0f172a&text=Part"} alt={item.name} />
                     <strong>{item.name}</strong>
-                    <span>{money.format(item.price)}</span>
+                    <span>{formatMoney(item.price)}</span>
                   </Link>
                 ))}
               </div>
@@ -142,22 +134,22 @@ const ProfilePage = () => {
 
           <article id="profile-recent" className="surface profile-card">
             <div className="section-head">
-              <h2>Недавно просмотренные</h2>
+              <h2>{t("profile.recentlyViewed")}</h2>
               {recentlyViewed.length ? (
                 <button type="button" className="ghost-btn" onClick={clearRecentlyViewed}>
-                  Очистить
+                  {t("common.clear")}
                 </button>
               ) : null}
             </div>
             {!recentlyViewed.length ? (
-              <p className="empty-state">Пока нет просмотренных товаров.</p>
+              <p className="empty-state">{t("profile.emptyRecent")}</p>
             ) : (
               <div className="mini-products-grid">
                 {recentlyViewed.map((item) => (
                   <Link key={item.id} to={`/product/${item.slug}`} className="mini-product-card">
                     <img src={item.image || "https://dummyimage.com/200x140/e2e8f0/0f172a&text=Part"} alt={item.name} />
                     <strong>{item.name}</strong>
-                    <span>{money.format(item.price)}</span>
+                    <span>{formatMoney(item.price)}</span>
                   </Link>
                 ))}
               </div>

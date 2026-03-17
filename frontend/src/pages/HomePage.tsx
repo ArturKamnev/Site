@@ -3,6 +3,7 @@ import type { TouchEvent } from "react";
 import { Link } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
 import heroImage from "../assets/hero.png";
+import { useI18n } from "../i18n/I18nProvider";
 import { api } from "../lib/api";
 import { useRecentlyViewedStore } from "../stores/recentlyViewedStore";
 import type { Brand, HeroSlide, Product } from "../types";
@@ -14,7 +15,7 @@ type ProductFeedResponse = {
 const fallbackSlide: HeroSlide = {
   id: 0,
   position: 1,
-  label: "Featured",
+  label: "",
   image_url: heroImage,
   title: null,
   subtitle: null,
@@ -24,6 +25,7 @@ const fallbackSlide: HeroSlide = {
 };
 
 const HomePage = () => {
+  const { t } = useI18n();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [slides, setSlides] = useState<HeroSlide[]>([]);
@@ -99,14 +101,14 @@ const HomePage = () => {
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <button type="button" className="carousel-arrow left" onClick={prevSlide} aria-label="Previous slide">
+        <button type="button" className="carousel-arrow left" onClick={prevSlide} aria-label={t("home.slide.prev")}>
           {"<"}
         </button>
 
         <div className="hero-slide" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-          <img src={currentSlide.image_url} alt={currentSlide.title || currentSlide.label} />
+          <img src={currentSlide.image_url} alt={currentSlide.title || currentSlide.label || t("home.fallbackFeatured")} />
           <div className="hero-slide-content">
-            <p className="hero-eyebrow">{currentSlide.label}</p>
+            <p className="hero-eyebrow">{currentSlide.label || t("home.fallbackFeatured")}</p>
             {currentSlide.title ? <h1>{currentSlide.title}</h1> : null}
             {currentSlide.subtitle ? <p>{currentSlide.subtitle}</p> : null}
             {currentSlide.button_text && currentSlide.button_link ? (
@@ -117,7 +119,7 @@ const HomePage = () => {
           </div>
         </div>
 
-        <button type="button" className="carousel-arrow right" onClick={nextSlide} aria-label="Next slide">
+        <button type="button" className="carousel-arrow right" onClick={nextSlide} aria-label={t("home.slide.next")}>
           {">"}
         </button>
       </article>
@@ -129,14 +131,14 @@ const HomePage = () => {
             key={slide.id || index}
             className={index === activeSlide ? "active" : ""}
             onClick={() => setActiveSlide(index)}
-            aria-label={`Go to slide ${index + 1}`}
+            aria-label={t("home.slide.goto", { index: index + 1 })}
           />
         ))}
       </div>
 
       <div className="section-head">
-        <h2>Popular products</h2>
-        <Link to="/brands">Open catalog</Link>
+        <h2>{t("home.popularProducts")}</h2>
+        <Link to="/brands">{t("home.openCatalog")}</Link>
       </div>
       <div className="horizontal-scroll">
         {products.map((product) => (
@@ -147,8 +149,8 @@ const HomePage = () => {
       </div>
 
       <div className="section-head">
-        <h2>Popular brands</h2>
-        <Link to="/brands">All brands</Link>
+        <h2>{t("home.popularBrands")}</h2>
+        <Link to="/brands">{t("home.allBrands")}</Link>
       </div>
       <div className="grid grid-brand">
         {brands.map((brand) => (
@@ -156,8 +158,8 @@ const HomePage = () => {
             <img src={brand.logo_url || "https://dummyimage.com/320x140/e2e8f0/0f172a&text=Brand"} alt={brand.name} />
             <div className="card-body">
               <h3>{brand.name}</h3>
-              <p className="muted">{brand.description || "OEM and aftermarket parts available."}</p>
-              <span className="meta-chip">{brand.productsCount || 0} products</span>
+              <p className="muted">{brand.description || t("home.noBrandDescription")}</p>
+              <span className="meta-chip">{t("home.productsCount", { count: brand.productsCount || 0 })}</span>
             </div>
           </Link>
         ))}
@@ -166,8 +168,8 @@ const HomePage = () => {
       {recentlyViewed.length ? (
         <>
           <div className="section-head">
-            <h2>Recently viewed</h2>
-            <Link to="/profile">Open in profile</Link>
+            <h2>{t("home.recentlyViewed")}</h2>
+            <Link to="/profile">{t("home.openInProfile")}</Link>
           </div>
           <div className="horizontal-scroll">
             {recentlyViewed.map((product) => (
@@ -181,16 +183,16 @@ const HomePage = () => {
 
       <div className="benefits-grid">
         <article className="benefit-card">
-          <h3>Fast search</h3>
-          <p>Filter by SKU, article, brand, and in-stock status.</p>
+          <h3>{t("home.benefit.fastSearchTitle")}</h3>
+          <p>{t("home.benefit.fastSearchText")}</p>
         </article>
         <article className="benefit-card">
-          <h3>Live prices</h3>
-          <p>Current prices and stock in every product card.</p>
+          <h3>{t("home.benefit.livePricesTitle")}</h3>
+          <p>{t("home.benefit.livePricesText")}</p>
         </article>
         <article className="benefit-card">
-          <h3>Account features</h3>
-          <p>Orders, favorites, and recently viewed items in one place.</p>
+          <h3>{t("home.benefit.accountTitle")}</h3>
+          <p>{t("home.benefit.accountText")}</p>
         </article>
       </div>
     </section>
