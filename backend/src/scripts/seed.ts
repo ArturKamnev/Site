@@ -4,11 +4,11 @@ import { slugify } from "../utils/slugify";
 
 const brandNames = [
   "Airtech",
-  "ANDAГ‡",
+  "ANDAC",
   "AYD",
   "AYDINSAN",
   "AYFAR",
-  "BEЕћER",
+  "BEŞER",
   "BF Germany",
   "BPW",
   "Cojali",
@@ -28,7 +28,7 @@ const brandNames = [
   "KURTSAN",
   "LASO",
   "LEMA",
-  "LEMFГ–RDER",
+  "LEMFÖRDER",
   "LuK",
   "MAHLE",
   "MARSHALL",
@@ -53,14 +53,14 @@ const brandNames = [
 ];
 
 const categoryNames = [
-  "РўРѕСЂРјРѕР·РЅР°СЏ СЃРёСЃС‚РµРјР°",
-  "РџРѕРґРІРµСЃРєР°",
-  "Р”РІРёРіР°С‚РµР»СЊ",
-  "Р¤РёР»СЊС‚СЂС‹",
-  "Р­Р»РµРєС‚СЂРёРєР°",
-  "РЎС†РµРїР»РµРЅРёРµ Рё С‚СЂР°РЅСЃРјРёСЃСЃРёСЏ",
-  "РћС…Р»Р°Р¶РґРµРЅРёРµ",
-  "РљСѓР·РѕРІ Рё РѕРїС‚РёРєР°",
+  "Тормозная система",
+  "Подвеска",
+  "Двигатель",
+  "Фильтры",
+  "Электрика",
+  "Сцепление и трансмиссия",
+  "Охлаждение",
+  "Кузов и оптика",
 ];
 
 const run = async () => {
@@ -114,7 +114,7 @@ const run = async () => {
           name,
           slugify(name),
           `https://dummyimage.com/280x120/0f172a/ffffff&text=${encodeURIComponent(name)}`,
-          `РћСЂРёРіРёРЅР°Р»СЊРЅС‹Рµ Рё РїСЂРѕРІРµСЂРµРЅРЅС‹Рµ Р·Р°РїС‡Р°СЃС‚Рё Р±СЂРµРЅРґР° ${name} РґР»СЏ РіСЂСѓР·РѕРІРѕРіРѕ С‚СЂР°РЅСЃРїРѕСЂС‚Р°.`,
+          `Оригинальные и проверенные запчасти бренда ${name} для грузового транспорта.`,
         ],
         client,
       );
@@ -123,7 +123,7 @@ const run = async () => {
     for (const category of categoryNames) {
       await query(
         "INSERT INTO categories (name, slug, description) VALUES ($1, $2, $3)",
-        [category, slugify(category), `РљР°С‚РµРіРѕСЂРёСЏ: ${category}`],
+        [category, slugify(category), `Категория: ${category}`],
         client,
       );
     }
@@ -211,7 +211,7 @@ const run = async () => {
           `PID-${model}`,
           price,
           image,
-          `Р”РµС‚Р°Р»СЊ ${name}. РџРѕРґС…РѕРґРёС‚ РґР»СЏ РєРѕРјРјРµСЂС‡РµСЃРєРѕРіРѕ Рё РіСЂСѓР·РѕРІРѕРіРѕ С‚СЂР°РЅСЃРїРѕСЂС‚Р°.`,
+          `Деталь ${name}. Подходит для коммерческого и грузового транспорта.`,
           brand.name,
           stock,
           stock > 0,
