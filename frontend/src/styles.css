@@ -146,6 +146,7 @@ p {
   min-width: 400px;
   border-radius: 999px;
   border: 1px solid #cbdcf2;
+  padding: 8px 8px 8px 8px;
   background: #fff;
   min-height: 44px;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
@@ -159,7 +160,7 @@ p {
 .header-search input {
   border: 0;
   background: transparent;
-  width: 100%;
+  width: 80%;
   min-width: 0;
 }
 
@@ -848,6 +849,7 @@ p {
   width: 100%;
   justify-content: center;
   margin-top: 12px;
+  border-radius: 100px;
 }
 
 .cart-extra-grid {
