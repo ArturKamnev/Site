@@ -1,10 +1,12 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import companyLogo from "../assets/company-logo.png";
 import { useI18n } from "../i18n/I18nProvider";
 import { useAuthStore } from "../stores/authStore";
 import { useCartStore } from "../stores/cartStore";
 import { useFavoritesStore } from "../stores/favoritesStore";
+import { useTheme } from "../theme/ThemeProvider";
 
 const routeLabels: Record<string, string> = {
   brands: "common.brands",
@@ -26,8 +28,74 @@ const formatBreadcrumbLabel = (segment: string, t: (key: string) => string) => {
   return labelKey ? t(labelKey) : normalized.replace(/-/g, " ");
 };
 
+const SunIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      d="M12 3.25V5.5M12 18.5v2.25M5.81 5.81 7.4 7.4M16.6 16.6l1.59 1.59M3.25 12H5.5M18.5 12h2.25M5.81 18.19 7.4 16.6M16.6 7.4l1.59-1.59M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+    />
+  </svg>
+);
+
+const MoonIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      d="M15.25 3.75A8.75 8.75 0 1 0 20.25 16 6.75 6.75 0 1 1 15.25 3.75Z"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+    />
+  </svg>
+);
+
+const HeartIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      d="M12 20.5 4.8 13.64a4.76 4.76 0 0 1 6.72-6.76L12 7.34l.48-.46a4.76 4.76 0 0 1 6.72 6.76L12 20.5Z"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+    />
+  </svg>
+);
+
+const CartIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      d="M3.5 5.5h2.22c.36 0 .67.25.75.6l.39 1.78m0 0h11.52c.52 0 .89.5.75 1L17.6 14.5a.77.77 0 0 1-.75.6H9.4a.77.77 0 0 1-.75-.6L6.86 7.88Zm2.28 10.62a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm8.35 0a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Z"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+    />
+  </svg>
+);
+
+const MenuIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      d="M4 7h16M4 12h16M4 17h16"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+    />
+  </svg>
+);
+
 const Layout = () => {
   const { language, setLanguage, t } = useI18n();
+  const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuthStore();
   const loadCart = useCartStore((state) => state.loadCart);
   const cartItems = useCartStore((state) => state.items);
@@ -72,6 +140,15 @@ const Layout = () => {
     navigate("/");
   };
 
+  const themeToggleLabel =
+    language === "ru"
+      ? theme === "dark"
+        ? "Переключить на светлую тему"
+        : "Переключить на темную тему"
+      : theme === "dark"
+        ? "Switch to light theme"
+        : "Switch to dark theme";
+
   return (
     <div className="app-shell">
       <header className="site-header">
@@ -79,7 +156,9 @@ const Layout = () => {
           <div className="container main-header-inner">
             <div className="header-left">
               <Link to="/" className="brand-title">
-                <span className="brand-title-mark">TP</span>
+                <span className="brand-logo-shell" aria-hidden="true">
+                  <img src={companyLogo} alt="" className="brand-logo" />
+                </span>
                 <span>
                   {t("layout.brandName")}
                   <small>{t("layout.brandTagline")}</small>
@@ -134,8 +213,7 @@ const Layout = () => {
                 </button>
               ) : null}
 
-              <div className="language-switch" role="group" aria-label={t("common.language")}
-              >
+              <div className="language-switch" role="group" aria-label={t("common.language")}>
                 <button
                   type="button"
                   className={`language-btn ${language === "en" ? "active" : ""}`}
@@ -151,6 +229,23 @@ const Layout = () => {
                   RU
                 </button>
               </div>
+
+              <button
+                type="button"
+                className={`theme-toggle ${theme === "dark" ? "is-dark" : "is-light"}`}
+                onClick={toggleTheme}
+                aria-label={themeToggleLabel}
+                title={themeToggleLabel}
+              >
+                <span className="theme-toggle-track">
+                  <span className="theme-icon sun-icon">
+                    <SunIcon />
+                  </span>
+                  <span className="theme-icon moon-icon">
+                    <MoonIcon />
+                  </span>
+                </span>
+              </button>
             </nav>
 
             <div className="mobile-actions">
@@ -162,12 +257,21 @@ const Layout = () => {
               >
                 {language.toUpperCase()}
               </button>
+              <button
+                type="button"
+                className={`mobile-icon-btn theme-toggle-mobile ${theme === "dark" ? "is-dark" : "is-light"}`}
+                onClick={toggleTheme}
+                aria-label={themeToggleLabel}
+                title={themeToggleLabel}
+              >
+                {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              </button>
               <NavLink to="/favorites" className="mobile-icon-btn" aria-label={t("common.favorites")}>
-                F
+                <HeartIcon />
                 <span className="counter">{favorites.length}</span>
               </NavLink>
               <NavLink to="/cart" className="mobile-icon-btn" aria-label={t("common.cart")}>
-                C
+                <CartIcon />
                 <span className="counter">{cartItems.length}</span>
               </NavLink>
               <button
@@ -176,7 +280,7 @@ const Layout = () => {
                 aria-label={t("layout.openMenu")}
                 onClick={() => setMobileMenuOpen(true)}
               >
-                &#8801;
+                <MenuIcon />
               </button>
             </div>
           </div>
@@ -194,16 +298,6 @@ const Layout = () => {
           </div>
         </div>
 
-        <nav className="section-nav desktop-only">
-          <div className="container section-nav-inner">
-            <NavLink to="/">{t("common.home")}</NavLink>
-            <NavLink to="/brands">{t("common.brands")}</NavLink>
-            <NavLink to="/favorites">{t("common.favorites")}</NavLink>
-            <NavLink to="/cart">{t("common.cart")}</NavLink>
-            <NavLink to="/profile">{t("common.profile")}</NavLink>
-          </div>
-        </nav>
-
         <div
           className={`mobile-drawer-overlay ${mobileMenuOpen ? "open" : ""}`}
           onClick={() => setMobileMenuOpen(false)}
@@ -211,9 +305,25 @@ const Layout = () => {
         <aside className={`mobile-drawer ${mobileMenuOpen ? "open" : ""}`}>
           <div className="mobile-drawer-head">
             <strong>{t("layout.mobileMenuTitle")}</strong>
-            <button type="button" className="mobile-icon-btn" onClick={() => setMobileMenuOpen(false)}>
-              &times;
-            </button>
+            <div className="mobile-drawer-tools">
+              <button
+                type="button"
+                className={`mobile-icon-btn theme-toggle-mobile ${theme === "dark" ? "is-dark" : "is-light"}`}
+                onClick={toggleTheme}
+                aria-label={themeToggleLabel}
+                title={themeToggleLabel}
+              >
+                {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+              </button>
+              <button
+                type="button"
+                className="mobile-icon-btn"
+                aria-label={t("common.close")}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                &times;
+              </button>
+            </div>
           </div>
 
           <div className="mobile-language-row">
@@ -297,8 +407,8 @@ const Layout = () => {
           </div>
           <div>
             <h5>{t("layout.footerContacts")}</h5>
-            <p>+996 (700) 123-456</p>
-            <p>support@truckparts.local</p>
+            <p>Главный номер - 0508 109 109</p>
+            <p>info@truckparts.kg</p>
           </div>
         </div>
       </footer>
