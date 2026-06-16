@@ -1,9 +1,9 @@
-﻿import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { isAxiosError } from "axios";
 import { useI18n } from "../i18n/I18nProvider";
 import { api } from "../lib/api";
-import type { Brand, Category, HeroSlide, Order, Product } from "../types";
+import type { AdminProductsResponse, Brand, Category, HeroSlide, Order, Product } from "../types";
 
 type Dashboard = {
   users: number;
@@ -26,6 +26,26 @@ type CsvImportResult = {
     row: number;
     message: string;
   }>;
+};
+
+type ProductsPagination = AdminProductsResponse["pagination"];
+type ProductAvailabilityFilter = "all" | "in_stock" | "out_of_stock" | "hidden";
+type ProductDiscountFilter = "all" | "with_discount" | "without_discount";
+type ProductSort =
+  | "newest"
+  | "oldest"
+  | "name_asc"
+  | "name_desc"
+  | "price_asc"
+  | "price_desc"
+  | "stock_asc"
+  | "stock_desc";
+
+const defaultProductsPagination: ProductsPagination = {
+  total: 0,
+  page: 1,
+  pageSize: 25,
+  totalPages: 1,
 };
 
 const defaultProduct = {
@@ -67,10 +87,22 @@ const AdminPage = () => {
   const { t, formatMoney } = useI18n();
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsPagination, setProductsPagination] = useState<ProductsPagination>(defaultProductsPagination);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([]);
+  const [productSearch, setProductSearch] = useState("");
+  const [debouncedProductSearch, setDebouncedProductSearch] = useState("");
+  const [productBrandFilter, setProductBrandFilter] = useState("");
+  const [productCategoryFilter, setProductCategoryFilter] = useState("");
+  const [productAvailabilityFilter, setProductAvailabilityFilter] = useState<ProductAvailabilityFilter>("all");
+  const [productDiscountFilter, setProductDiscountFilter] = useState<ProductDiscountFilter>("all");
+  const [productSort, setProductSort] = useState<ProductSort>("newest");
+  const [productPage, setProductPage] = useState(1);
+  const [productPageSize, setProductPageSize] = useState(25);
+  const [isProductsLoading, setIsProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState("");
   const [productForm, setProductForm] = useState(defaultProduct);
   const [brandForm, setBrandForm] = useState(defaultBrandForm);
   const [categoryName, setCategoryName] = useState("");
@@ -86,10 +118,9 @@ const AdminPage = () => {
       ? status
       : t(`status.${status.toLowerCase()}`);
 
-  const load = async () => {
-    const [d, p, b, c, o, s] = await Promise.all([
+  const load = useCallback(async () => {
+    const [d, b, c, o, s] = await Promise.all([
       api.get<Dashboard>("/admin/dashboard"),
-      api.get<Product[]>("/admin/products"),
       api.get<Brand[]>("/admin/brands"),
       api.get<Category[]>("/admin/categories"),
       api.get<Order[]>("/admin/orders"),
@@ -97,32 +128,91 @@ const AdminPage = () => {
     ]);
 
     setDashboard(d.data);
-    setProducts(p.data);
     setBrands(b.data);
     setCategories(c.data);
     setOrders(o.data);
     setHeroSlides(s.data);
 
-    setDiscountDrafts(
-      Object.fromEntries(
-        p.data.map((item) => [item.id, String(item.discount_percent ?? 0)]),
-      ),
-    );
-
     if (b.data[0] && c.data[0]) {
       setProductForm((prev) => ({ ...prev, brandId: b.data[0].id, categoryId: c.data[0].id }));
     }
-  };
+  }, []);
+
+  const loadProducts = useCallback(async () => {
+    setIsProductsLoading(true);
+    setProductsError("");
+
+    try {
+      const response = await api.get<AdminProductsResponse>("/admin/products", {
+        params: {
+          page: productPage,
+          pageSize: productPageSize,
+          search: debouncedProductSearch || undefined,
+          brandId: productBrandFilter || undefined,
+          categoryId: productCategoryFilter || undefined,
+          availability: productAvailabilityFilter,
+          discount: productDiscountFilter,
+          sort: productSort,
+        },
+      });
+
+      setProducts(response.data.items);
+      setProductsPagination(response.data.pagination);
+      setDiscountDrafts((prev) => ({
+        ...prev,
+        ...Object.fromEntries(
+          response.data.items.map((item) => [item.id, String(item.discount_percent ?? 0)]),
+        ),
+      }));
+    } catch (error) {
+      setProducts([]);
+      setProductsPagination(defaultProductsPagination);
+      setProductsError(
+        isAxiosError<{ message?: string }>(error) && error.response?.data?.message
+          ? error.response.data.message
+          : t("errors.generic"),
+      );
+    } finally {
+      setIsProductsLoading(false);
+    }
+  }, [
+    debouncedProductSearch,
+    productAvailabilityFilter,
+    productBrandFilter,
+    productCategoryFilter,
+    productDiscountFilter,
+    productPage,
+    productPageSize,
+    productSort,
+    t,
+  ]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedProductSearch(productSearch.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [productSearch]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
 
   const createProduct = async (event: FormEvent) => {
     event.preventDefault();
     await api.post("/admin/products", productForm);
     setProductForm(defaultProduct);
     await load();
+    if (productPage !== 1) {
+      setProductPage(1);
+      return;
+    }
+    await loadProducts();
   };
 
   const importCsv = async (event: FormEvent) => {
@@ -130,7 +220,7 @@ const AdminPage = () => {
     setCsvImportError("");
 
     if (!csvFile) {
-      setCsvImportError("Select a CSV file before importing.");
+      setCsvImportError(t("admin.csvSelectFileError"));
       return;
     }
 
@@ -143,11 +233,12 @@ const AdminPage = () => {
       const response = await api.post<CsvImportResult>("/admin/import/csv", formData);
       setCsvImportResult(response.data);
       await load();
+      await loadProducts();
     } catch (error) {
       const message =
         isAxiosError<{ message?: string }>(error) && error.response?.data?.message
           ? error.response.data.message
-          : "CSV import failed. Please check the file and try again.";
+          : t("admin.csvImportFailed");
       setCsvImportError(message);
     } finally {
       setIsCsvImporting(false);
@@ -158,7 +249,31 @@ const AdminPage = () => {
     await api.patch(`/admin/products/${productId}/discount`, {
       discountPercent: Math.max(0, Math.min(discountValue, 95)),
     });
+    await loadProducts();
+  };
+
+  const deleteProduct = async (productId: number) => {
+    await api.delete(`/admin/products/${productId}`);
     await load();
+
+    if (products.length === 1 && productPage > 1) {
+      setProductPage((page) => page - 1);
+      return;
+    }
+
+    await loadProducts();
+  };
+
+  const clearProductFilters = () => {
+    setProductSearch("");
+    setDebouncedProductSearch("");
+    setProductBrandFilter("");
+    setProductCategoryFilter("");
+    setProductAvailabilityFilter("all");
+    setProductDiscountFilter("all");
+    setProductSort("newest");
+    setProductPageSize(25);
+    setProductPage(1);
   };
 
   const submitBrand = async (event: FormEvent) => {
@@ -243,7 +358,7 @@ const AdminPage = () => {
         </article>
       </div>
 
-      <h2>Import products from CSV</h2>
+      <h2>{t("admin.csvImportTitle")}</h2>
       <form className="form surface" onSubmit={importCsv}>
         <input
           type="file"
@@ -254,54 +369,54 @@ const AdminPage = () => {
           }}
         />
         <select value={csvMode} onChange={(event) => setCsvMode(event.target.value as CsvImportResult["mode"])}>
-          <option value="upsert">Update and add products</option>
-          <option value="full_sync">Full sync: hide missing products</option>
+          <option value="upsert">{t("admin.csvModeUpsert")}</option>
+          <option value="full_sync">{t("admin.csvModeFullSync")}</option>
         </select>
         <button type="submit" disabled={isCsvImporting}>
-          {isCsvImporting ? "Importing..." : "Import CSV"}
+          {isCsvImporting ? t("admin.csvImporting") : t("admin.csvImportButton")}
         </button>
         {csvImportError ? <p className="error">{csvImportError}</p> : null}
         {csvImportResult ? (
           <div className="csv-import-summary">
             <div className="stats-grid">
               <article className="stat-card">
-                <span>Total rows</span>
+                <span>{t("admin.csvTotalRows")}</span>
                 <strong>{csvImportResult.totalRows}</strong>
               </article>
               <article className="stat-card">
-                <span>Created products</span>
+                <span>{t("admin.csvCreatedProducts")}</span>
                 <strong>{csvImportResult.createdProducts}</strong>
               </article>
               <article className="stat-card">
-                <span>Updated products</span>
+                <span>{t("admin.csvUpdatedProducts")}</span>
                 <strong>{csvImportResult.updatedProducts}</strong>
               </article>
               <article className="stat-card">
-                <span>Created brands</span>
+                <span>{t("admin.csvCreatedBrands")}</span>
                 <strong>{csvImportResult.createdBrands}</strong>
               </article>
               <article className="stat-card">
-                <span>Created categories</span>
+                <span>{t("admin.csvCreatedCategories")}</span>
                 <strong>{csvImportResult.createdCategories}</strong>
               </article>
               <article className="stat-card">
-                <span>Deactivated products</span>
+                <span>{t("admin.csvDeactivatedProducts")}</span>
                 <strong>{csvImportResult.deactivatedProducts}</strong>
               </article>
             </div>
             {csvImportResult.errors.length ? (
               <div>
-                <strong>Errors</strong>
+                <strong>{t("admin.csvErrors")}</strong>
                 <ul className="csv-import-errors">
                   {csvImportResult.errors.map((item) => (
                     <li key={`${item.row}-${item.message}`}>
-                      Row {item.row}: {item.message}
+                      {t("admin.csvRowError", { row: item.row, message: item.message })}
                     </li>
                   ))}
                 </ul>
               </div>
             ) : (
-              <p className="muted">Import completed without row errors.</p>
+              <p className="muted">{t("admin.csvNoErrors")}</p>
             )}
           </div>
         ) : null}
@@ -396,6 +511,112 @@ const AdminPage = () => {
 
       <h2>{t("admin.productsAndDiscounts")}</h2>
       <div className="table-wrap surface">
+        <div className="admin-products-toolbar">
+          <div className="admin-products-toolbar-head">
+            <strong>{t("admin.filters")}</strong>
+            <span className="muted">{t("admin.productsFound", { count: productsPagination.total })}</span>
+          </div>
+          <div className="admin-products-filters">
+            <input
+              value={productSearch}
+              onChange={(event) => {
+                setProductSearch(event.target.value);
+                setProductPage(1);
+              }}
+              placeholder={t("admin.productsSearchPlaceholder")}
+            />
+            <select
+              value={productBrandFilter}
+              onChange={(event) => {
+                setProductBrandFilter(event.target.value);
+                setProductPage(1);
+              }}
+            >
+              <option value="">{t("admin.allBrands")}</option>
+              {brands.map((brand) => (
+                <option key={brand.id} value={brand.id}>
+                  {brand.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={productCategoryFilter}
+              onChange={(event) => {
+                setProductCategoryFilter(event.target.value);
+                setProductPage(1);
+              }}
+            >
+              <option value="">{t("admin.allCategories")}</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={productAvailabilityFilter}
+              onChange={(event) => {
+                setProductAvailabilityFilter(event.target.value as ProductAvailabilityFilter);
+                setProductPage(1);
+              }}
+              aria-label={t("admin.availability")}
+            >
+              <option value="all">{t("admin.availabilityAll")}</option>
+              <option value="in_stock">{t("admin.availabilityInStock")}</option>
+              <option value="out_of_stock">{t("admin.availabilityOutOfStock")}</option>
+              <option value="hidden">{t("admin.availabilityHidden")}</option>
+            </select>
+            <select
+              value={productDiscountFilter}
+              onChange={(event) => {
+                setProductDiscountFilter(event.target.value as ProductDiscountFilter);
+                setProductPage(1);
+              }}
+              aria-label={t("admin.discountFilter")}
+            >
+              <option value="all">{t("admin.discountAll")}</option>
+              <option value="with_discount">{t("admin.discountWith")}</option>
+              <option value="without_discount">{t("admin.discountWithout")}</option>
+            </select>
+            <select
+              value={productSort}
+              onChange={(event) => {
+                setProductSort(event.target.value as ProductSort);
+                setProductPage(1);
+              }}
+              aria-label={t("common.sort")}
+            >
+              <option value="newest">{t("admin.sortNewest")}</option>
+              <option value="oldest">{t("admin.sortOldest")}</option>
+              <option value="name_asc">{t("admin.sortNameAsc")}</option>
+              <option value="name_desc">{t("admin.sortNameDesc")}</option>
+              <option value="price_asc">{t("admin.sortPriceAsc")}</option>
+              <option value="price_desc">{t("admin.sortPriceDesc")}</option>
+              <option value="stock_asc">{t("admin.sortStockAsc")}</option>
+              <option value="stock_desc">{t("admin.sortStockDesc")}</option>
+            </select>
+            <select
+              value={productPageSize}
+              onChange={(event) => {
+                setProductPageSize(Number(event.target.value));
+                setProductPage(1);
+              }}
+              aria-label={t("admin.pageSize")}
+            >
+              <option value={25}>{t("admin.pageSize", { count: 25 })}</option>
+              <option value={50}>{t("admin.pageSize", { count: 50 })}</option>
+              <option value={100}>{t("admin.pageSize", { count: 100 })}</option>
+            </select>
+            <button type="button" className="ghost-btn" onClick={clearProductFilters}>
+              {t("admin.clearFilters")}
+            </button>
+          </div>
+        </div>
+        {isProductsLoading ? <p className="muted admin-products-status">{t("admin.productsLoading")}</p> : null}
+        {productsError ? <p className="error admin-products-status">{productsError}</p> : null}
+        {!isProductsLoading && !productsError && !products.length ? (
+          <p className="empty-state">{t("admin.noProductsFound")}</p>
+        ) : null}
         <table>
           <thead>
             <tr>
@@ -454,7 +675,7 @@ const AdminPage = () => {
                   <button
                     type="button"
                     className="danger"
-                    onClick={() => api.delete(`/admin/products/${product.id}`).then(load)}
+                    onClick={() => deleteProduct(product.id)}
                   >
                     {t("common.delete")}
                   </button>
@@ -463,6 +684,28 @@ const AdminPage = () => {
             ))}
           </tbody>
         </table>
+        <div className="pagination">
+          <button
+            type="button"
+            disabled={isProductsLoading || productsPagination.page <= 1}
+            onClick={() => setProductPage((page) => Math.max(1, page - 1))}
+          >
+            {t("common.back")}
+          </button>
+          <span>
+            {t("admin.pageOf", {
+              page: productsPagination.page,
+              totalPages: productsPagination.totalPages,
+            })}
+          </span>
+          <button
+            type="button"
+            disabled={isProductsLoading || productsPagination.page >= productsPagination.totalPages}
+            onClick={() => setProductPage((page) => Math.min(productsPagination.totalPages, page + 1))}
+          >
+            {t("common.next")}
+          </button>
+        </div>
       </div>
 
       <h2>{t("admin.heroSlides")}</h2>

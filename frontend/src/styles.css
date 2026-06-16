@@ -1352,6 +1352,39 @@ th {
   margin-bottom: 18px;
 }
 
+.admin-products-toolbar {
+  display: grid;
+  gap: 10px;
+  min-width: 980px;
+  margin-bottom: 12px;
+}
+
+.admin-products-toolbar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-products-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(6, minmax(140px, 1fr)) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-products-filters input,
+.admin-products-filters select,
+.admin-products-filters button {
+  min-height: 40px;
+  padding: 9px 10px;
+}
+
+.admin-products-status {
+  min-width: 980px;
+  margin: 8px 0;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

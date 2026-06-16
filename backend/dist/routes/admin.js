@@ -18,9 +18,40 @@ const upload = (0, multer_1.default)({
     },
 });
 const ORDER_STATUS = ["PENDING", "PROCESSING", "SHIPPED", "COMPLETED", "CANCELED"];
+const PRODUCT_AVAILABILITY_FILTERS = ["all", "in_stock", "out_of_stock", "hidden"];
+const PRODUCT_DISCOUNT_FILTERS = ["all", "with_discount", "without_discount"];
+const PRODUCT_SORTS = [
+    "newest",
+    "oldest",
+    "name_asc",
+    "name_desc",
+    "price_asc",
+    "price_desc",
+    "stock_asc",
+    "stock_desc",
+];
 const parsePositiveId = (raw) => {
     const id = Number(raw);
     return Number.isInteger(id) && id > 0 ? id : null;
+};
+const getQueryValue = (raw) => (typeof raw === "string" ? raw.trim() : undefined);
+const parsePositiveIntegerQuery = (raw, fallback, max) => {
+    const value = Number(getQueryValue(raw) ?? fallback);
+    const parsed = Number.isInteger(value) && value > 0 ? value : fallback;
+    return max ? Math.min(parsed, max) : parsed;
+};
+const isProductAvailabilityFilter = (value) => PRODUCT_AVAILABILITY_FILTERS.includes(value);
+const isProductDiscountFilter = (value) => PRODUCT_DISCOUNT_FILTERS.includes(value);
+const isProductSort = (value) => PRODUCT_SORTS.includes(value);
+const PRODUCT_SORT_SQL = {
+    newest: "p.created_at DESC, p.id DESC",
+    oldest: "p.created_at ASC, p.id ASC",
+    name_asc: "LOWER(p.name) ASC, p.id ASC",
+    name_desc: "LOWER(p.name) DESC, p.id DESC",
+    price_asc: "p.price ASC, p.id ASC",
+    price_desc: "p.price DESC, p.id DESC",
+    stock_asc: "p.stock ASC, p.id ASC",
+    stock_desc: "p.stock DESC, p.id DESC",
 };
 router.use(auth_1.authRequired, (0, auth_1.rolesRequired)("admin", "employee"));
 router.post("/import/csv", upload.single("file"), async (req, res, next) => {
@@ -144,8 +175,68 @@ router.get("/dashboard", async (_req, res, next) => {
         next(error);
     }
 });
-router.get("/products", async (_req, res, next) => {
+router.get("/products", async (req, res, next) => {
     try {
+        const page = parsePositiveIntegerQuery(req.query.page, 1);
+        const pageSize = parsePositiveIntegerQuery(req.query.pageSize, 25, 100);
+        const offset = (page - 1) * pageSize;
+        const search = getQueryValue(req.query.search);
+        const brandId = parsePositiveIntegerQuery(req.query.brandId, 0);
+        const categoryId = parsePositiveIntegerQuery(req.query.categoryId, 0);
+        const availabilityParam = getQueryValue(req.query.availability) ?? "all";
+        const discountParam = getQueryValue(req.query.discount) ?? "all";
+        const sortParam = getQueryValue(req.query.sort) ?? "newest";
+        const availability = isProductAvailabilityFilter(availabilityParam) ? availabilityParam : "all";
+        const discount = isProductDiscountFilter(discountParam) ? discountParam : "all";
+        const sort = isProductSort(sortParam) ? sortParam : "newest";
+        const params = [];
+        const whereParts = [];
+        const addParam = (value) => {
+            params.push(value);
+            return `$${params.length}`;
+        };
+        if (search) {
+            const searchParam = addParam(`%${search}%`);
+            whereParts.push(`(
+        p.name ILIKE ${searchParam}
+        OR p.sku ILIKE ${searchParam}
+        OR p.article ILIKE ${searchParam}
+        OR p.part_id ILIKE ${searchParam}
+        OR p.manufacturer ILIKE ${searchParam}
+        OR b.name ILIKE ${searchParam}
+        OR c.name ILIKE ${searchParam}
+        OR p.external_id ILIKE ${searchParam}
+      )`);
+        }
+        if (brandId > 0) {
+            whereParts.push(`p.brand_id = ${addParam(brandId)}`);
+        }
+        if (categoryId > 0) {
+            whereParts.push(`p.category_id = ${addParam(categoryId)}`);
+        }
+        if (availability === "in_stock") {
+            whereParts.push("p.is_available = TRUE AND p.stock > 0");
+        }
+        else if (availability === "out_of_stock") {
+            whereParts.push("p.is_available = TRUE AND p.stock <= 0");
+        }
+        else if (availability === "hidden") {
+            whereParts.push("p.is_available = FALSE");
+        }
+        if (discount === "with_discount") {
+            whereParts.push("COALESCE(p.discount_percent, 0) > 0");
+        }
+        else if (discount === "without_discount") {
+            whereParts.push("COALESCE(p.discount_percent, 0) <= 0");
+        }
+        const whereSql = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : "";
+        const total = await (0, db_1.queryOne)(`SELECT COUNT(*) as count
+       FROM products p
+       JOIN brands b ON b.id = p.brand_id
+       JOIN categories c ON c.id = p.category_id
+       ${whereSql}`, params);
+        const limitParam = addParam(pageSize);
+        const offsetParam = addParam(offset);
         const items = await (0, db_1.query)(`SELECT p.*,
               CASE WHEN p.is_available THEN 1 ELSE 0 END as is_available,
               b.name as "brandName",
@@ -153,8 +244,19 @@ router.get("/products", async (_req, res, next) => {
        FROM products p
        JOIN brands b ON b.id = p.brand_id
        JOIN categories c ON c.id = p.category_id
-       ORDER BY p.created_at DESC`);
-        res.json(items);
+       ${whereSql}
+       ORDER BY ${PRODUCT_SORT_SQL[sort]}
+       LIMIT ${limitParam} OFFSET ${offsetParam}`, params);
+        const totalCount = Number(total?.count ?? 0);
+        res.json({
+            items,
+            pagination: {
+                total: totalCount,
+                page,
+                pageSize,
+                totalPages: Math.max(Math.ceil(totalCount / pageSize), 1),
+            },
+        });
     }
     catch (error) {
         next(error);

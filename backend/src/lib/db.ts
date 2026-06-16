@@ -200,6 +200,16 @@ export const initDb = async () => {
     CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand_id);
     CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
     CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
+    CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
+    CREATE INDEX IF NOT EXISTS idx_products_article ON products(article);
+    CREATE INDEX IF NOT EXISTS idx_products_part_id ON products(part_id);
+    CREATE INDEX IF NOT EXISTS idx_products_manufacturer ON products(manufacturer);
+    CREATE INDEX IF NOT EXISTS idx_products_stock ON products(stock);
+    CREATE INDEX IF NOT EXISTS idx_products_is_available ON products(is_available);
+    CREATE INDEX IF NOT EXISTS idx_products_discount_percent ON products(discount_percent);
+    CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at);
+    CREATE INDEX IF NOT EXISTS idx_brands_name ON brands(name);
+    CREATE INDEX IF NOT EXISTS idx_categories_name ON categories(name);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_products_external_id_unique ON products(external_id) WHERE external_id IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_brands_external_id_unique ON brands(external_id) WHERE external_id IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_external_id_unique ON categories(external_id) WHERE external_id IS NOT NULL;

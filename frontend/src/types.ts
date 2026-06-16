@@ -47,6 +47,16 @@ export type Product = {
   categorySlug?: string;
 };
 
+export type AdminProductsResponse = {
+  items: Product[];
+  pagination: {
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+};
+
 export type FavoriteItem = Product & {
   favoriteId?: number;
   productId?: number;
