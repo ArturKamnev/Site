@@ -41,20 +41,39 @@ export type Product = {
   is_available: number;
   brand_id?: number;
   category_id?: number;
+  specs_json?: string | null;
   brandName?: string;
   brandSlug?: string;
   categoryName?: string;
   categorySlug?: string;
 };
 
+export type AdminPagination = {
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
 export type AdminProductsResponse = {
   items: Product[];
-  pagination: {
-    total: number;
-    page: number;
-    pageSize: number;
-    totalPages: number;
-  };
+  pagination: AdminPagination;
+};
+
+export type AdminOption = {
+  id: number;
+  name: string;
+  slug: string;
+};
+
+export type AdminBrandsResponse = {
+  items: Brand[];
+  pagination: AdminPagination;
+};
+
+export type AdminCategoriesResponse = {
+  items: Category[];
+  pagination: AdminPagination;
 };
 
 export type FavoriteItem = Product & {
@@ -99,6 +118,8 @@ export type Order = {
   email: string;
   total: number;
   created_at: string;
+  userEmail?: string | null;
+  userName?: string | null;
   items: Array<{
     id: number;
     product_id?: number | null;
@@ -108,4 +129,9 @@ export type Order = {
     quantity: number;
     line_total: number;
   }>;
+};
+
+export type AdminOrdersResponse = {
+  items: Order[];
+  pagination: AdminPagination;
 };

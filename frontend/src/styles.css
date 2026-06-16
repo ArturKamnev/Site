@@ -1352,10 +1352,122 @@ th {
   margin-bottom: 18px;
 }
 
+.admin-section {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-tab {
+  min-height: 40px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.admin-tab.active {
+  color: #fff;
+}
+
+.admin-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+.admin-section-head p {
+  margin-top: 4px;
+}
+
+.admin-collapsible {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-product-form {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+}
+
+.admin-product-form .error,
+.admin-product-form .inline-row,
+.admin-product-form button[type="submit"] {
+  grid-column: 1 / -1;
+}
+
+.admin-form-panel {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-soft);
+}
+
+.admin-form-panel legend {
+  padding: 0 6px;
+  color: var(--text);
+  font-weight: 800;
+  font-family: "Exo 2", sans-serif;
+}
+
+.admin-form-panel label,
+.form label:not(.inline-checkbox) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-form-panel label span,
+.form label:not(.inline-checkbox) span,
+.admin-status-select span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.admin-form-panel textarea {
+  grid-column: 1 / -1;
+}
+
+.admin-checkbox {
+  align-self: end;
+  min-height: 42px;
+  padding: 10px 0;
+}
+
+.admin-form-actions {
+  justify-content: flex-start;
+}
+
+.admin-directory-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, auto) minmax(120px, auto);
+  gap: 8px;
+}
+
+.admin-orders-toolbar {
+  grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(130px, auto));
+}
+
 .admin-products-toolbar {
   display: grid;
   gap: 10px;
-  min-width: 980px;
+  min-width: 1040px;
   margin-bottom: 12px;
 }
 
@@ -1381,8 +1493,26 @@ th {
 }
 
 .admin-products-status {
-  min-width: 980px;
+  min-width: 1040px;
   margin: 8px 0;
+}
+
+.admin-products-table {
+  min-width: 1040px;
+}
+
+.admin-product-cell {
+  display: grid;
+  gap: 5px;
+  min-width: 230px;
+}
+
+.admin-discount-row {
+  min-width: 250px;
+}
+
+.admin-row-actions {
+  min-width: 190px;
 }
 
 table {
@@ -1418,6 +1548,41 @@ th {
   width: 72px;
 }
 
+.status-chip {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(var(--primary-rgb), 0.2);
+  background: rgba(var(--primary-rgb), 0.08);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 9px;
+}
+
+.status-chip.success,
+.status-completed,
+.status-shipped {
+  border-color: rgba(28, 154, 114, 0.24);
+  background: rgba(28, 154, 114, 0.1);
+  color: var(--success);
+}
+
+.status-pending,
+.status-processing {
+  border-color: rgba(var(--primary-rgb), 0.24);
+  background: rgba(var(--primary-rgb), 0.09);
+  color: var(--primary);
+}
+
+.status-canceled,
+.muted-chip {
+  border-color: rgba(103, 127, 152, 0.24);
+  background: rgba(103, 127, 152, 0.1);
+  color: var(--muted);
+}
+
 .brand-admin-item,
 .hero-slide-admin-item {
   border-radius: 14px;
@@ -1443,6 +1608,29 @@ th {
 .order-card {
   display: grid;
   gap: 8px;
+}
+
+.admin-orders-grid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.admin-order-card ul {
+  padding-left: 18px;
+}
+
+.admin-order-meta {
+  display: grid;
+  gap: 6px;
+  color: var(--text-soft);
+}
+
+.admin-order-meta strong {
+  color: var(--text);
+}
+
+.admin-status-select {
+  display: grid;
+  gap: 6px;
 }
 
 .order-head {
@@ -1652,6 +1840,27 @@ textarea:focus-visible {
 .error {
   color: var(--danger);
   font-weight: 700;
+}
+
+.success-text {
+  color: var(--success);
+  font-weight: 800;
+}
+
+.admin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(4, 10, 18, 0.54);
+}
+
+.admin-modal {
+  width: min(920px, 100%);
+  max-height: min(88vh, 860px);
+  overflow: auto;
 }
 
 .site-footer {
@@ -1960,6 +2169,11 @@ textarea:focus-visible {
 
   .brand-admin-item,
   .hero-slide-admin-item {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-directory-toolbar,
+  .admin-orders-toolbar {
     grid-template-columns: 1fr;
   }
 

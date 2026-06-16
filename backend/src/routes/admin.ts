@@ -16,6 +16,7 @@ const upload = multer({
 });
 
 const ORDER_STATUS = ["PENDING", "PROCESSING", "SHIPPED", "COMPLETED", "CANCELED"] as const;
+const ORDER_STATUS_FILTERS = ["all", ...ORDER_STATUS] as const;
 const PRODUCT_AVAILABILITY_FILTERS = ["all", "in_stock", "out_of_stock", "hidden"] as const;
 const PRODUCT_DISCOUNT_FILTERS = ["all", "with_discount", "without_discount"] as const;
 const PRODUCT_SORTS = [
@@ -28,10 +29,25 @@ const PRODUCT_SORTS = [
   "stock_asc",
   "stock_desc",
 ] as const;
+const DIRECTORY_SORTS = ["name_asc", "name_desc", "newest", "oldest"] as const;
+const ORDER_SORTS = ["newest", "oldest", "total_asc", "total_desc"] as const;
 
+type OrderStatusFilter = (typeof ORDER_STATUS_FILTERS)[number];
 type ProductAvailabilityFilter = (typeof PRODUCT_AVAILABILITY_FILTERS)[number];
 type ProductDiscountFilter = (typeof PRODUCT_DISCOUNT_FILTERS)[number];
 type ProductSort = (typeof PRODUCT_SORTS)[number];
+type DirectorySort = (typeof DIRECTORY_SORTS)[number];
+type OrderSort = (typeof ORDER_SORTS)[number];
+
+type AdminOrderRow = {
+  id: number;
+  [key: string]: unknown;
+};
+
+type AdminOrderItemRow = {
+  order_id: number;
+  [key: string]: unknown;
+};
 
 const parsePositiveId = (raw: string) => {
   const id = Number(raw);
@@ -54,6 +70,13 @@ const isProductDiscountFilter = (value: string): value is ProductDiscountFilter 
 
 const isProductSort = (value: string): value is ProductSort => PRODUCT_SORTS.includes(value as ProductSort);
 
+const isDirectorySort = (value: string): value is DirectorySort => DIRECTORY_SORTS.includes(value as DirectorySort);
+
+const isOrderStatusFilter = (value: string): value is OrderStatusFilter =>
+  ORDER_STATUS_FILTERS.includes(value as OrderStatusFilter);
+
+const isOrderSort = (value: string): value is OrderSort => ORDER_SORTS.includes(value as OrderSort);
+
 const PRODUCT_SORT_SQL: Record<ProductSort, string> = {
   newest: "p.created_at DESC, p.id DESC",
   oldest: "p.created_at ASC, p.id ASC",
@@ -63,6 +86,27 @@ const PRODUCT_SORT_SQL: Record<ProductSort, string> = {
   price_desc: "p.price DESC, p.id DESC",
   stock_asc: "p.stock ASC, p.id ASC",
   stock_desc: "p.stock DESC, p.id DESC",
+};
+
+const BRAND_SORT_SQL: Record<DirectorySort, string> = {
+  name_asc: "LOWER(b.name) ASC, b.id ASC",
+  name_desc: "LOWER(b.name) DESC, b.id DESC",
+  newest: "b.created_at DESC, b.id DESC",
+  oldest: "b.created_at ASC, b.id ASC",
+};
+
+const CATEGORY_SORT_SQL: Record<DirectorySort, string> = {
+  name_asc: "LOWER(c.name) ASC, c.id ASC",
+  name_desc: "LOWER(c.name) DESC, c.id DESC",
+  newest: "c.created_at DESC, c.id DESC",
+  oldest: "c.created_at ASC, c.id ASC",
+};
+
+const ORDER_SORT_SQL: Record<OrderSort, string> = {
+  newest: "o.created_at DESC, o.id DESC",
+  oldest: "o.created_at ASC, o.id ASC",
+  total_asc: "o.total ASC, o.id ASC",
+  total_desc: "o.total DESC, o.id DESC",
 };
 
 router.use(authRequired, rolesRequired("admin", "employee"));
@@ -344,12 +388,22 @@ router.put("/products/:id", async (req, res, next) => {
     }
     const body = productSchema.parse(req.body);
     const pricing = normalizePricing(body.price, body.discountPercent);
-    await query(
-      `UPDATE products
+    const updated = await queryOne(
+      `WITH updated AS (
+         UPDATE products
        SET name = $1, slug = $2, sku = $3, article = $4, part_id = $5, price = $6, old_price = $7, discount_percent = $8,
            image = $9, description = $10, manufacturer = $11, stock = $12, is_available = $13, brand_id = $14, category_id = $15,
            specs_json = $16, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $17`,
+         WHERE id = $17
+         RETURNING *
+       )
+       SELECT p.*,
+              CASE WHEN p.is_available THEN 1 ELSE 0 END as is_available,
+              b.name as "brandName",
+              c.name as "categoryName"
+       FROM updated p
+       JOIN brands b ON b.id = p.brand_id
+       JOIN categories c ON c.id = p.category_id`,
       [
         body.name,
         body.slug ? slugify(body.slug) : slugify(body.name),
@@ -370,7 +424,10 @@ router.put("/products/:id", async (req, res, next) => {
         id,
       ],
     );
-    res.json({ message: "Product updated" });
+    if (!updated) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    res.json(updated);
   } catch (error) {
     next(error);
   }
@@ -418,9 +475,64 @@ router.delete("/products/:id", async (req, res, next) => {
   }
 });
 
-router.get("/brands", async (_req, res, next) => {
+router.get("/brands", async (req, res, next) => {
   try {
-    res.json(await query("SELECT * FROM brands ORDER BY name ASC"));
+    const page = parsePositiveIntegerQuery(req.query.page, 1);
+    const pageSize = parsePositiveIntegerQuery(req.query.pageSize, 25, 100);
+    const offset = (page - 1) * pageSize;
+    const search = getQueryValue(req.query.search);
+    const sortParam = getQueryValue(req.query.sort) ?? "name_asc";
+    const sort = isDirectorySort(sortParam) ? sortParam : "name_asc";
+    const params: unknown[] = [];
+    const whereParts: string[] = [];
+    const addParam = (value: unknown) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+
+    if (search) {
+      const searchParam = addParam(`%${search}%`);
+      whereParts.push(`(b.name ILIKE ${searchParam} OR b.slug ILIKE ${searchParam} OR b.description ILIKE ${searchParam})`);
+    }
+
+    const whereSql = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : "";
+    const total = await queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count
+       FROM brands b
+       ${whereSql}`,
+      params,
+    );
+    const limitParam = addParam(pageSize);
+    const offsetParam = addParam(offset);
+    const items = await query(
+      `SELECT b.*, COUNT(p.id)::int as "productsCount"
+       FROM brands b
+       LEFT JOIN products p ON p.brand_id = b.id
+       ${whereSql}
+       GROUP BY b.id
+       ORDER BY ${BRAND_SORT_SQL[sort]}
+       LIMIT ${limitParam} OFFSET ${offsetParam}`,
+      params,
+    );
+
+    const totalCount = Number(total?.count ?? 0);
+    res.json({
+      items,
+      pagination: {
+        total: totalCount,
+        page,
+        pageSize,
+        totalPages: Math.max(Math.ceil(totalCount / pageSize), 1),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/brands/options", async (_req, res, next) => {
+  try {
+    res.json(await query("SELECT id, name, slug FROM brands ORDER BY LOWER(name) ASC, id ASC"));
   } catch (error) {
     next(error);
   }
@@ -485,16 +597,91 @@ router.put("/brands/:id", async (req, res, next) => {
 
 router.delete("/brands/:id", async (req, res, next) => {
   try {
-    await query("DELETE FROM brands WHERE id = $1", [Number(req.params.id)]);
+    const id = parsePositiveId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ message: "Invalid brand id" });
+    }
+
+    const linkedProducts = await queryOne<{ count: string }>(
+      "SELECT COUNT(*) as count FROM products WHERE brand_id = $1",
+      [id],
+    );
+    const productsCount = Number(linkedProducts?.count ?? 0);
+    if (productsCount > 0) {
+      return res.status(409).json({
+        message: "Cannot delete brand because it has linked products",
+        productsCount,
+      });
+    }
+
+    const deleted = await queryOne<{ id: number }>("DELETE FROM brands WHERE id = $1 RETURNING id", [id]);
+    if (!deleted) {
+      return res.status(404).json({ message: "Brand not found" });
+    }
     res.json({ message: "Brand deleted" });
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/categories", async (_req, res, next) => {
+router.get("/categories", async (req, res, next) => {
   try {
-    res.json(await query("SELECT * FROM categories ORDER BY name ASC"));
+    const page = parsePositiveIntegerQuery(req.query.page, 1);
+    const pageSize = parsePositiveIntegerQuery(req.query.pageSize, 25, 100);
+    const offset = (page - 1) * pageSize;
+    const search = getQueryValue(req.query.search);
+    const sortParam = getQueryValue(req.query.sort) ?? "name_asc";
+    const sort = isDirectorySort(sortParam) ? sortParam : "name_asc";
+    const params: unknown[] = [];
+    const whereParts: string[] = [];
+    const addParam = (value: unknown) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+
+    if (search) {
+      const searchParam = addParam(`%${search}%`);
+      whereParts.push(`(c.name ILIKE ${searchParam} OR c.slug ILIKE ${searchParam} OR c.description ILIKE ${searchParam})`);
+    }
+
+    const whereSql = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : "";
+    const total = await queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count
+       FROM categories c
+       ${whereSql}`,
+      params,
+    );
+    const limitParam = addParam(pageSize);
+    const offsetParam = addParam(offset);
+    const items = await query(
+      `SELECT c.*, COUNT(p.id)::int as "productsCount"
+       FROM categories c
+       LEFT JOIN products p ON p.category_id = c.id
+       ${whereSql}
+       GROUP BY c.id
+       ORDER BY ${CATEGORY_SORT_SQL[sort]}
+       LIMIT ${limitParam} OFFSET ${offsetParam}`,
+      params,
+    );
+
+    const totalCount = Number(total?.count ?? 0);
+    res.json({
+      items,
+      pagination: {
+        total: totalCount,
+        page,
+        pageSize,
+        totalPages: Math.max(Math.ceil(totalCount / pageSize), 1),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/categories/options", async (_req, res, next) => {
+  try {
+    res.json(await query("SELECT id, name, slug FROM categories ORDER BY LOWER(name) ASC, id ASC"));
   } catch (error) {
     next(error);
   }
@@ -541,7 +728,23 @@ router.delete("/categories/:id", async (req, res, next) => {
     if (!id) {
       return res.status(400).json({ message: "Invalid category id" });
     }
-    await query("DELETE FROM categories WHERE id = $1", [id]);
+
+    const linkedProducts = await queryOne<{ count: string }>(
+      "SELECT COUNT(*) as count FROM products WHERE category_id = $1",
+      [id],
+    );
+    const productsCount = Number(linkedProducts?.count ?? 0);
+    if (productsCount > 0) {
+      return res.status(409).json({
+        message: "Cannot delete category because it has linked products",
+        productsCount,
+      });
+    }
+
+    const deleted = await queryOne<{ id: number }>("DELETE FROM categories WHERE id = $1 RETURNING id", [id]);
+    if (!deleted) {
+      return res.status(404).json({ message: "Category not found" });
+    }
     res.json({ message: "Category deleted" });
   } catch (error) {
     next(error);
@@ -693,21 +896,91 @@ router.delete("/hero-slides/:id", async (req, res, next) => {
   }
 });
 
-router.get("/orders", async (_req, res, next) => {
+router.get("/orders", async (req, res, next) => {
   try {
-    const orders = await query<{ id: number }>(
+    const page = parsePositiveIntegerQuery(req.query.page, 1);
+    const pageSize = parsePositiveIntegerQuery(req.query.pageSize, 25, 100);
+    const offset = (page - 1) * pageSize;
+    const search = getQueryValue(req.query.search);
+    const statusParam = getQueryValue(req.query.status) ?? "all";
+    const sortParam = getQueryValue(req.query.sort) ?? "newest";
+    const status = isOrderStatusFilter(statusParam) ? statusParam : "all";
+    const sort = isOrderSort(sortParam) ? sortParam : "newest";
+    const params: unknown[] = [];
+    const whereParts: string[] = [];
+    const addParam = (value: unknown) => {
+      params.push(value);
+      return `$${params.length}`;
+    };
+
+    if (search) {
+      const searchParam = addParam(`%${search}%`);
+      const searchParts = [
+        `o.full_name ILIKE ${searchParam}`,
+        `o.phone ILIKE ${searchParam}`,
+        `o.email ILIKE ${searchParam}`,
+        `u.email ILIKE ${searchParam}`,
+        `u.name ILIKE ${searchParam}`,
+      ];
+      const orderId = parsePositiveId(search);
+      if (orderId) {
+        searchParts.push(`o.id = ${addParam(orderId)}`);
+      }
+      whereParts.push(`(${searchParts.join(" OR ")})`);
+    }
+
+    if (status !== "all") {
+      whereParts.push(`o.status = ${addParam(status)}`);
+    }
+
+    const whereSql = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : "";
+    const total = await queryOne<{ count: string }>(
+      `SELECT COUNT(*) as count
+       FROM orders o
+       LEFT JOIN users u ON u.id = o.user_id
+       ${whereSql}`,
+      params,
+    );
+    const limitParam = addParam(pageSize);
+    const offsetParam = addParam(offset);
+    const orders = await query<AdminOrderRow>(
       `SELECT o.*, u.email as "userEmail", u.name as "userName"
        FROM orders o
        LEFT JOIN users u ON u.id = o.user_id
-       ORDER BY o.created_at DESC`,
+       ${whereSql}
+       ORDER BY ${ORDER_SORT_SQL[sort]}
+       LIMIT ${limitParam} OFFSET ${offsetParam}`,
+      params,
     );
-    const data = await Promise.all(
-      orders.map(async (order) => ({
+
+    const orderIds = orders.map((order) => order.id);
+    const orderItems = orderIds.length
+      ? await query<AdminOrderItemRow>(
+          "SELECT * FROM order_items WHERE order_id = ANY($1::int[]) ORDER BY id ASC",
+          [orderIds],
+        )
+      : [];
+    const itemsByOrderId = new Map<number, AdminOrderItemRow[]>();
+    for (const item of orderItems) {
+      const items = itemsByOrderId.get(item.order_id) ?? [];
+      items.push(item);
+      itemsByOrderId.set(item.order_id, items);
+    }
+
+    const items = orders.map((order) => ({
         ...order,
-        items: await query("SELECT * FROM order_items WHERE order_id = $1", [order.id]),
-      })),
-    );
-    res.json(data);
+        items: itemsByOrderId.get(order.id) ?? [],
+      }));
+    const totalCount = Number(total?.count ?? 0);
+    res.json({
+      items,
+      pagination: {
+        total: totalCount,
+        page,
+        pageSize,
+        totalPages: Math.max(Math.ceil(totalCount / pageSize), 1),
+      },
+    });
   } catch (error) {
     next(error);
   }
