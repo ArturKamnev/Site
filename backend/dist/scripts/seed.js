@@ -8,11 +8,11 @@ const db_1 = require("../lib/db");
 const slugify_1 = require("../utils/slugify");
 const brandNames = [
     "Airtech",
-    "ANDAГ‡",
+    "ANDAC",
     "AYD",
     "AYDINSAN",
     "AYFAR",
-    "BEЕћER",
+    "BEŞER",
     "BF Germany",
     "BPW",
     "Cojali",
@@ -32,7 +32,7 @@ const brandNames = [
     "KURTSAN",
     "LASO",
     "LEMA",
-    "LEMFГ–RDER",
+    "LEMFÖRDER",
     "LuK",
     "MAHLE",
     "MARSHALL",
@@ -56,14 +56,14 @@ const brandNames = [
     "ZF",
 ];
 const categoryNames = [
-    "РўРѕСЂРјРѕР·РЅР°СЏ СЃРёСЃС‚РµРјР°",
-    "РџРѕРґРІРµСЃРєР°",
-    "Р”РІРёРіР°С‚РµР»СЊ",
-    "Р¤РёР»СЊС‚СЂС‹",
-    "Р­Р»РµРєС‚СЂРёРєР°",
-    "РЎС†РµРїР»РµРЅРёРµ Рё С‚СЂР°РЅСЃРјРёСЃСЃРёСЏ",
-    "РћС…Р»Р°Р¶РґРµРЅРёРµ",
-    "РљСѓР·РѕРІ Рё РѕРїС‚РёРєР°",
+    "Тормозная система",
+    "Подвеска",
+    "Двигатель",
+    "Фильтры",
+    "Электрика",
+    "Сцепление и трансмиссия",
+    "Охлаждение",
+    "Кузов и оптика",
 ];
 const run = async () => {
     await (0, db_1.initDb)();
@@ -93,11 +93,11 @@ const run = async () => {
                 name,
                 (0, slugify_1.slugify)(name),
                 `https://dummyimage.com/280x120/0f172a/ffffff&text=${encodeURIComponent(name)}`,
-                `РћСЂРёРіРёРЅР°Р»СЊРЅС‹Рµ Рё РїСЂРѕРІРµСЂРµРЅРЅС‹Рµ Р·Р°РїС‡Р°СЃС‚Рё Р±СЂРµРЅРґР° ${name} РґР»СЏ РіСЂСѓР·РѕРІРѕРіРѕ С‚СЂР°РЅСЃРїРѕСЂС‚Р°.`,
+                `Оригинальные и проверенные запчасти бренда ${name} для грузового транспорта.`,
             ], client);
         }
         for (const category of categoryNames) {
-            await (0, db_1.query)("INSERT INTO categories (name, slug, description) VALUES ($1, $2, $3)", [category, (0, slugify_1.slugify)(category), `РљР°С‚РµРіРѕСЂРёСЏ: ${category}`], client);
+            await (0, db_1.query)("INSERT INTO categories (name, slug, description) VALUES ($1, $2, $3)", [category, (0, slugify_1.slugify)(category), `Категория: ${category}`], client);
         }
         await (0, db_1.query)(`INSERT INTO hero_slides
        (position, label, image_url, title, subtitle, button_text, button_link, is_active)
@@ -157,7 +157,7 @@ const run = async () => {
                 `PID-${model}`,
                 price,
                 image,
-                `Р”РµС‚Р°Р»СЊ ${name}. РџРѕРґС…РѕРґРёС‚ РґР»СЏ РєРѕРјРјРµСЂС‡РµСЃРєРѕРіРѕ Рё РіСЂСѓР·РѕРІРѕРіРѕ С‚СЂР°РЅСЃРїРѕСЂС‚Р°.`,
+                `Деталь ${name}. Подходит для коммерческого и грузового транспорта.`,
                 brand.name,
                 stock,
                 stock > 0,

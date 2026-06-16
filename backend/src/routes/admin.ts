@@ -1,11 +1,19 @@
 import type { PoolClient } from "pg";
 import { Router } from "express";
+import multer from "multer";
 import { z } from "zod";
 import { authRequired, rolesRequired } from "../middleware/auth";
 import { query, queryOne, withTransaction } from "../lib/db";
+import { importProductsFromCsv, type ImportMode } from "../lib/csvProductImport";
 import { slugify } from "../utils/slugify";
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
 
 const ORDER_STATUS = ["PENDING", "PROCESSING", "SHIPPED", "COMPLETED", "CANCELED"] as const;
 const parsePositiveId = (raw: string) => {
@@ -14,6 +22,24 @@ const parsePositiveId = (raw: string) => {
 };
 
 router.use(authRequired, rolesRequired("admin", "employee"));
+
+router.post("/import/csv", upload.single("file"), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "CSV file is required" });
+    }
+
+    const rawMode = typeof req.body.mode === "string" ? req.body.mode : "upsert";
+    if (rawMode !== "upsert" && rawMode !== "full_sync") {
+      return res.status(400).json({ message: "Unsupported import mode" });
+    }
+
+    const summary = await importProductsFromCsv(req.file.buffer, rawMode as ImportMode);
+    res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
 
 const brandSchema = z.object({
   name: z.string().trim().min(2).max(120),

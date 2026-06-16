@@ -16,11 +16,13 @@
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
+    "csv-parse": "^7.0.0",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
+    "multer": "^2.2.0",
     "pg": "^8.16.3",
     "zod": "^4.1.11"
   },
@@ -30,6 +32,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
+    "@types/multer": "^2.1.0",
     "@types/node": "^25.5.0",
     "@types/pg": "^8.15.6",
     "tsx": "^4.21.0",

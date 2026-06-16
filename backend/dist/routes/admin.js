@@ -1,17 +1,44 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
+const multer_1 = __importDefault(require("multer"));
 const zod_1 = require("zod");
 const auth_1 = require("../middleware/auth");
 const db_1 = require("../lib/db");
+const csvProductImport_1 = require("../lib/csvProductImport");
 const slugify_1 = require("../utils/slugify");
 const router = (0, express_1.Router)();
+const upload = (0, multer_1.default)({
+    storage: multer_1.default.memoryStorage(),
+    limits: {
+        fileSize: 10 * 1024 * 1024,
+    },
+});
 const ORDER_STATUS = ["PENDING", "PROCESSING", "SHIPPED", "COMPLETED", "CANCELED"];
 const parsePositiveId = (raw) => {
     const id = Number(raw);
     return Number.isInteger(id) && id > 0 ? id : null;
 };
 router.use(auth_1.authRequired, (0, auth_1.rolesRequired)("admin", "employee"));
+router.post("/import/csv", upload.single("file"), async (req, res, next) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: "CSV file is required" });
+        }
+        const rawMode = typeof req.body.mode === "string" ? req.body.mode : "upsert";
+        if (rawMode !== "upsert" && rawMode !== "full_sync") {
+            return res.status(400).json({ message: "Unsupported import mode" });
+        }
+        const summary = await (0, csvProductImport_1.importProductsFromCsv)(req.file.buffer, rawMode);
+        res.json(summary);
+    }
+    catch (error) {
+        next(error);
+    }
+});
 const brandSchema = zod_1.z.object({
     name: zod_1.z.string().trim().min(2).max(120),
     slug: zod_1.z.string().trim().min(2).max(120).optional(),

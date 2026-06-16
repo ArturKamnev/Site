@@ -186,6 +186,9 @@ export const initDb = async () => {
 
     ALTER TABLE brands ADD COLUMN IF NOT EXISTS logo_url TEXT;
     ALTER TABLE brands ADD COLUMN IF NOT EXISTS description TEXT;
+    ALTER TABLE brands ADD COLUMN IF NOT EXISTS external_id TEXT;
+    ALTER TABLE categories ADD COLUMN IF NOT EXISTS external_id TEXT;
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS external_id TEXT;
     ALTER TABLE products ADD COLUMN IF NOT EXISTS old_price DOUBLE PRECISION;
     ALTER TABLE products ADD COLUMN IF NOT EXISTS discount_percent DOUBLE PRECISION;
     ALTER TABLE hero_slides ADD COLUMN IF NOT EXISTS title TEXT;
@@ -197,6 +200,9 @@ export const initDb = async () => {
     CREATE INDEX IF NOT EXISTS idx_products_brand ON products(brand_id);
     CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
     CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_products_external_id_unique ON products(external_id) WHERE external_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_brands_external_id_unique ON brands(external_id) WHERE external_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_external_id_unique ON categories(external_id) WHERE external_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
     CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
     CREATE INDEX IF NOT EXISTS idx_favorites_user ON favorites(user_id);

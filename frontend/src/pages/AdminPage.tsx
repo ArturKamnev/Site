@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { isAxiosError } from "axios";
 import { useI18n } from "../i18n/I18nProvider";
 import { api } from "../lib/api";
 import type { Brand, Category, HeroSlide, Order, Product } from "../types";
@@ -11,6 +12,20 @@ type Dashboard = {
   categories: number;
   orders: number;
   heroSlides?: number;
+};
+
+type CsvImportResult = {
+  mode: "upsert" | "full_sync";
+  totalRows: number;
+  createdProducts: number;
+  updatedProducts: number;
+  createdBrands: number;
+  createdCategories: number;
+  deactivatedProducts: number;
+  errors: Array<{
+    row: number;
+    message: string;
+  }>;
 };
 
 const defaultProduct = {
@@ -61,6 +76,11 @@ const AdminPage = () => {
   const [categoryName, setCategoryName] = useState("");
   const [slideForm, setSlideForm] = useState(defaultSlideForm);
   const [discountDrafts, setDiscountDrafts] = useState<Record<number, string>>({});
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvMode, setCsvMode] = useState<CsvImportResult["mode"]>("upsert");
+  const [csvImportResult, setCsvImportResult] = useState<CsvImportResult | null>(null);
+  const [csvImportError, setCsvImportError] = useState("");
+  const [isCsvImporting, setIsCsvImporting] = useState(false);
   const getStatusLabel = (status: string) =>
     t(`status.${status.toLowerCase()}`) === `status.${status.toLowerCase()}`
       ? status
@@ -103,6 +123,35 @@ const AdminPage = () => {
     await api.post("/admin/products", productForm);
     setProductForm(defaultProduct);
     await load();
+  };
+
+  const importCsv = async (event: FormEvent) => {
+    event.preventDefault();
+    setCsvImportError("");
+
+    if (!csvFile) {
+      setCsvImportError("Select a CSV file before importing.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", csvFile);
+    formData.append("mode", csvMode);
+
+    setIsCsvImporting(true);
+    try {
+      const response = await api.post<CsvImportResult>("/admin/import/csv", formData);
+      setCsvImportResult(response.data);
+      await load();
+    } catch (error) {
+      const message =
+        isAxiosError<{ message?: string }>(error) && error.response?.data?.message
+          ? error.response.data.message
+          : "CSV import failed. Please check the file and try again.";
+      setCsvImportError(message);
+    } finally {
+      setIsCsvImporting(false);
+    }
   };
 
   const applyProductDiscount = async (productId: number, discountValue: number) => {
@@ -193,6 +242,70 @@ const AdminPage = () => {
           <strong>{dashboard?.orders ?? 0}</strong>
         </article>
       </div>
+
+      <h2>Import products from CSV</h2>
+      <form className="form surface" onSubmit={importCsv}>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(event) => {
+            setCsvFile(event.target.files?.[0] ?? null);
+            setCsvImportError("");
+          }}
+        />
+        <select value={csvMode} onChange={(event) => setCsvMode(event.target.value as CsvImportResult["mode"])}>
+          <option value="upsert">Update and add products</option>
+          <option value="full_sync">Full sync: hide missing products</option>
+        </select>
+        <button type="submit" disabled={isCsvImporting}>
+          {isCsvImporting ? "Importing..." : "Import CSV"}
+        </button>
+        {csvImportError ? <p className="error">{csvImportError}</p> : null}
+        {csvImportResult ? (
+          <div className="csv-import-summary">
+            <div className="stats-grid">
+              <article className="stat-card">
+                <span>Total rows</span>
+                <strong>{csvImportResult.totalRows}</strong>
+              </article>
+              <article className="stat-card">
+                <span>Created products</span>
+                <strong>{csvImportResult.createdProducts}</strong>
+              </article>
+              <article className="stat-card">
+                <span>Updated products</span>
+                <strong>{csvImportResult.updatedProducts}</strong>
+              </article>
+              <article className="stat-card">
+                <span>Created brands</span>
+                <strong>{csvImportResult.createdBrands}</strong>
+              </article>
+              <article className="stat-card">
+                <span>Created categories</span>
+                <strong>{csvImportResult.createdCategories}</strong>
+              </article>
+              <article className="stat-card">
+                <span>Deactivated products</span>
+                <strong>{csvImportResult.deactivatedProducts}</strong>
+              </article>
+            </div>
+            {csvImportResult.errors.length ? (
+              <div>
+                <strong>Errors</strong>
+                <ul className="csv-import-errors">
+                  {csvImportResult.errors.map((item) => (
+                    <li key={`${item.row}-${item.message}`}>
+                      Row {item.row}: {item.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="muted">Import completed without row errors.</p>
+            )}
+          </div>
+        ) : null}
+      </form>
 
       <h2>{t("admin.createProduct")}</h2>
       <form className="form surface" onSubmit={createProduct}>
